@@ -342,14 +342,24 @@
                     badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
                     timestamp: now.getTime(),
                     tag: 'opentravel-update',
-                    renotify: true,
-                    actions: [
-                        { action: 'open', title: 'Open App' },
-                        { action: 'close', title: 'Close' }
-                    ]
+                    renotify: true
                 };
 
-                return new Notification(title, options);
+                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                    // If service worker is active, use it to show notification with actions
+                    navigator.serviceWorker.ready.then(registration => {
+                        registration.showNotification(title, {
+                            ...options,
+                            actions: [
+                                { action: 'open', title: 'Open App' },
+                                { action: 'close', title: 'Close' }
+                            ]
+                        });
+                    });
+                } else {
+                    // Fallback to regular Notification if service worker is not available
+                    return new Notification(title, options);
+                }
             }
         }
 
@@ -359,7 +369,15 @@
                 navigator.serviceWorker.ready.then(registration => {
                     registration.active.postMessage({
                         type: 'START_BACKGROUND_UPDATES',
-                        settings: settings
+                        settings: settings,
+                        notificationOptions: {
+                            icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                            badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                            actions: [
+                                { action: 'open', title: 'Open App' },
+                                { action: 'close', title: 'Close' }
+                            ]
+                        }
                     });
                 });
             }
