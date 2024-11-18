@@ -40,19 +40,22 @@ self.addEventListener('activate', (event) => {
 });
 
 let alarmSettings = null;
+let notificationId = null;
 
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'START_BACKGROUND_UPDATES') {
+  if (event.data && event.data.type === 'START_JOURNEY') {
     alarmSettings = event.data.settings;
-    startBackgroundUpdates();
+    startJourney();
   }
 });
 
-function startBackgroundUpdates() {
+function startJourney() {
   if (alarmSettings) {
+    const estimatedTime = calculateEstimatedTime();
+    sendStatusNotification('start', estimatedTime);
     setInterval(() => {
       checkLocation();
-    }, alarmSettings.updateInterval * 1000); // Convert seconds to milliseconds
+    }, alarmSettings.updateInterval * 1000);
   }
 }
 
@@ -63,9 +66,12 @@ async function checkLocation() {
       position.coords, 
       {latitude: alarmSettings.destination[0], longitude: alarmSettings.destination[1]}
     );
+    const progress = calculateProgress(distance);
+    updateNotificationProgress(progress);
     
     if (distance <= alarmSettings.radius) {
       sendStatusNotification('end');
+      self.registration.unregister();
     }
   } catch (error) {
     console.error('Error checking location:', error);
@@ -98,34 +104,49 @@ function calculateDistance(point1, point2) {
 }
 
 function calculateProgress(currentDistance) {
-  const totalDistance = alarmSettings.initialDistance || currentDistance;
+  const totalDistance = alarmSettings.initialDistance;
   return Math.max(0, Math.min(100, ((totalDistance - currentDistance) / totalDistance) * 100));
 }
 
-function sendStatusNotification(type) {
+function sendStatusNotification(type, estimatedTime) {
   const title = 'OpenTravel';
   const options = {
     icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
     badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
     tag: 'opentravel-status',
-    silent: true,
-    data: { type },
+    renotify: true,
+    requireInteraction: true,
     actions: [{ action: 'open', title: 'View' }],
     timestamp: Date.now()
   };
 
   if (type === 'start') {
-    const estimatedTime = calculateEstimatedTime();
     options.body = `Arrival by ${formatTime(estimatedTime.end)}`;
-    options.requireInteraction = true;
+    options.data = { type: 'start', progress: 0 };
   } else if (type === 'end') {
     options.body = 'You have reached your destination!';
-    options.requireInteraction = true;
+    options.data = { type: 'end', progress: 100 };
     options.vibrate = [200, 100, 200];
-    options.silent = false;
   }
 
-  self.registration.showNotification(title, options);
+  self.registration.showNotification(title, options).then((notification) => {
+    notificationId = notification.tag;
+  });
+}
+
+function updateNotificationProgress(progress) {
+  if (notificationId) {
+    self.registration.getNotifications({ tag: notificationId }).then((notifications) => {
+      if (notifications.length > 0) {
+        const notification = notifications[0];
+        const updatedOptions = {
+          ...notification.options,
+          data: { ...notification.data, progress: progress }
+        };
+        self.registration.showNotification(notification.title, updatedOptions);
+      }
+    });
+  }
 }
 
 function calculateEstimatedTime() {
@@ -147,12 +168,6 @@ function formatTime(date) {
     minute: '2-digit',
     hour12: true 
   });
-}
-
-function formatDistance(meters) {
-  return meters > 1000 
-    ? `${(meters/1000).toFixed(1)} km` 
-    : `${Math.round(meters)} m`;
 }
 
 self.addEventListener('notificationclick', (event) => {
