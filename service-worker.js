@@ -56,9 +56,24 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  event.waitUntil(
-    clients.openWindow('/')
-  );
+  if (event.action === 'open') {
+    event.waitUntil(
+      clients.matchAll({ type: 'window' }).then(clientList => {
+        for (const client of clientList) {
+          if (client.url === '/' && 'focus' in client) {
+            return client.focus();
+          }
+        }
+        if (clients.openWindow) {
+          return clients.openWindow('/');
+        }
+      })
+    );
+  } else {
+    event.waitUntil(
+      clients.openWindow('/')
+    );
+  }
 });
 
 self.addEventListener('backgroundfetchsuccess', (event) => {
@@ -109,11 +124,22 @@ async function checkAlarmCondition(position, settings) {
 
     // Show a notification with the current distance
     if (settings.enableNotifications) {
-      self.registration.showNotification('OpenTravel Distance Update', {
-        body: `Current distance: ${Math.round(distance)} meters`,
+      self.registration.showNotification('OpenTravel Update', {
+        badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        body: `${formatDistance(distance)} from destination\nETA: ${calculateETA(distance)}`,
         icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-        tag: 'distance-update', // This ensures we don't spam notifications
-        renotify: true // This allows the notification to update instead of creating a new one
+        tag: 'distance-update',
+        renotify: true,
+        actions: [
+          { action: 'open', title: 'View Map' }
+        ],
+        data: {
+          progress: calculateProgress(distance, settings.radius),
+          timestamp: new Date().getTime()
+        },
+        timestamp: new Date().getTime(),
+        requireInteraction: true,
+        silent: true
       });
     }
   }
@@ -149,4 +175,23 @@ function calculateDistance(position1, position2) {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
   return R * c; // Distance in meters
+}
+
+function formatDistance(meters) {
+  return meters > 1000 
+    ? `${(meters/1000).toFixed(1)} km` 
+    : `${Math.round(meters)} m`;
+}
+
+function calculateETA(distance) {
+  // Assuming average speed of 30 km/h for demonstration
+  const timeInMinutes = (distance / 1000) / (30 / 60);
+  const now = new Date();
+  now.setMinutes(now.getMinutes() + timeInMinutes);
+  return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function calculateProgress(currentDistance, targetRadius) {
+  // Convert to a percentage where 100% is at the destination
+  return Math.min(100, Math.max(0, 100 - (currentDistance / targetRadius * 100)));
 }
