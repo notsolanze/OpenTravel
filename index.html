@@ -231,6 +231,10 @@
                 return;
             }
 
+            if (isMobileDevice()) {
+                showAlert('On mobile devices, notifications may not work when the app is in the background. Keep the app open for best results.', 'info');
+            }
+
             fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destinationInput)}, Philippines`)
                 .then(response => response.json())
                 .then(data => {
@@ -398,31 +402,26 @@
         // Show notification
         function showNotification(title, body) {
             if ("Notification" in window && Notification.permission === "granted") {
-                sendNotification(title, body);
+                if (navigator.userAgent.match(/Android/i)) {
+                    // For Android, use service worker to show notification
+                    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.ready.then(registration => {
+                            registration.showNotification(title, {
+                                body: body,
+                                icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                                vibrate: [200, 100, 200]
+                            });
+                        });
+                    }
+                } else {
+                    // For other platforms, use regular Notification
+                    new Notification(title, { body: body });
+                }
             } else if (window.navigator.standalone) {
-                // For iOS Safari when in standalone mode (PWA)
-                new Notification(title, { body: body });
+                // For iOS when in standalone mode (PWA)
+                alert(`${title}: ${body}`);
             } else {
                 showAlert(body, 'info');
-            }
-        }
-
-        function sendNotification(title, body) {
-            const options = {
-                body: body,
-                icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                vibrate: [200, 100, 200],
-                tag: 'opentravel-update',
-                renotify: true
-            };
-
-            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.ready.then(registration => {
-                    registration.showNotification(title, options);
-                });
-            } else {
-                new Notification(title, options);
             }
         }
 
@@ -432,16 +431,22 @@
                 clearInterval(backgroundInterval);
             }
 
+            let lastUpdateTime = Date.now();
+            const minInterval = 60000; // Minimum 1 minute between updates
+
             backgroundInterval = setInterval(() => {
-                if (document.hidden) {
+                const now = Date.now();
+                if (document.hidden && now - lastUpdateTime >= minInterval) {
                     checkLocationAndNotify();
+                    lastUpdateTime = now;
                 }
-            }, settings.updateInterval * 60 * 1000); // Convert minutes to milliseconds
+            }, 10000); // Check every 10 seconds, but only update if enough time has passed
 
             // Listen for visibility changes
             document.addEventListener("visibilitychange", function() {
-                if (document.hidden) {
+                if (!document.hidden) {
                     checkLocationAndNotify();
+                    lastUpdateTime = Date.now();
                 }
             });
         }
@@ -703,6 +708,10 @@
             alertPopup.classList.add('opacity-0', '-translate-y-full');
             alertPopup.classList.remove('border-l-4', 'border-green-500', 'border-red-500', 'border-blue-500');
             document.getElementById('alertIcon').classList.remove('bg-green-100', 'bg-red-100', 'bg-blue-100');
+        }
+
+        function isMobileDevice() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         }
     </script>
 </body>
