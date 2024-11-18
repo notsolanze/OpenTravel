@@ -30,3 +30,76 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   }
 });
+
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'alarm-sync') {
+    event.waitUntil(checkAlarmCondition());
+  }
+});
+
+self.addEventListener('push', (event) => {
+  const data = event.data.json();
+  const options = {
+    body: data.body,
+    icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+    vibrate: [100, 50, 100],
+    data: {
+      dateOfArrival: Date.now(),
+      primaryKey: 'alarm'
+    }
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, options)
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.openWindow('/')
+  );
+});
+
+async function checkAlarmCondition() {
+  const cache = await caches.open(CACHE_NAME);
+  const alarmSettings = await cache.match('/alarm-settings');
+  if (alarmSettings) {
+    const settings = await alarmSettings.json();
+    const currentPosition = await getCurrentPosition();
+    const distance = calculateDistance(currentPosition, settings.destination);
+    
+    if (distance <= settings.radius) {
+      if (settings.enableNotifications) {
+        self.registration.showNotification('OpenTravel Alarm', {
+          body: 'You have reached your destination!',
+          icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+          vibrate: [200, 100, 200]
+        });
+      }
+      // You can add more actions here, like playing a sound
+    }
+  }
+}
+
+function getCurrentPosition() {
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject);
+  });
+}
+
+function calculateDistance(position1, position2) {
+  // Haversine formula to calculate distance between two points
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = position1.coords.latitude * Math.PI/180;
+  const φ2 = position2[0] * Math.PI/180;
+  const Δφ = (position2[0] - position1.coords.latitude) * Math.PI/180;
+  const Δλ = (position2[1] - position1.coords.longitude) * Math.PI/180;
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+  return R * c; // Distance in meters
+}
