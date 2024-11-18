@@ -76,12 +76,12 @@ function getCurrentPosition() {
   });
 }
 
-function calculateDistance(position1, position2) {
+function calculateDistance(point1, point2) {
   const R = 6371e3; // Earth's radius in meters
-  const φ1 = position1.latitude * Math.PI/180;
-  const φ2 = position2.latitude * Math.PI/180;
-  const Δφ = (position2.latitude - position1.latitude) * Math.PI/180;
-  const Δλ = (position2.longitude - position1.longitude) * Math.PI/180;
+  const φ1 = point1.latitude * Math.PI/180;
+  const φ2 = point2.latitude * Math.PI/180;
+  const Δφ = (point2.latitude - point1.latitude) * Math.PI/180;
+  const Δλ = (point2.longitude - point1.longitude) * Math.PI/180;
 
   const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
             Math.cos(φ1) * Math.cos(φ2) *
