@@ -39,146 +39,113 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-let alarmSettings = null;
-let notificationId = null;
+let journeyState = {
+  active: false,
+  startTime: null,
+  destination: null,
+  initialDistance: null,
+  radius: null,
+  updateInterval: 30
+};
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'START_JOURNEY') {
-    alarmSettings = event.data.settings;
-    startJourney();
+    journeyState = {
+      active: true,
+      startTime: new Date(),
+      destination: event.data.settings.destination,
+      initialDistance: event.data.settings.initialDistance,
+      radius: event.data.settings.radius,
+      updateInterval: event.data.settings.updateInterval || 30
+    };
+    
+    showJourneyNotification('start');
+    startJourneyUpdates();
   }
 });
 
-function startJourney() {
-  if (alarmSettings) {
-    const estimatedTime = calculateEstimatedTime();
-    sendStatusNotification('start', estimatedTime);
+function startJourneyUpdates() {
+  if (journeyState.active) {
     setInterval(() => {
-      checkLocation();
-    }, alarmSettings.updateInterval * 1000);
+      if (journeyState.active) {
+        updateJourneyProgress();
+      }
+    }, journeyState.updateInterval * 1000);
   }
 }
 
-async function checkLocation() {
-  try {
-    const position = await getCurrentPosition();
-    const distance = calculateDistance(
-      position.coords, 
-      {latitude: alarmSettings.destination[0], longitude: alarmSettings.destination[1]}
-    );
-    const progress = calculateProgress(distance);
-    updateNotificationProgress(progress);
-    
-    if (distance <= alarmSettings.radius) {
-      sendStatusNotification('end');
-      self.registration.unregister();
-    }
-  } catch (error) {
-    console.error('Error checking location:', error);
+function updateJourneyProgress() {
+  // Simulating progress update
+  const progress = Math.min(100, (Date.now() - journeyState.startTime) / (30 * 60 * 1000) * 100);
+  const remainingDistance = Math.max(0, journeyState.initialDistance * (1 - progress / 100));
+
+  if (progress < 100) {
+    showJourneyNotification('progress', progress, remainingDistance);
+  } else {
+    showJourneyNotification('end');
+    journeyState.active = false;
   }
 }
 
-function getCurrentPosition() {
-  return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      maximumAge: 0,
-      timeout: 5000
-    });
-  });
-}
-
-function calculateDistance(point1, point2) {
-  const R = 6371e3; // Earth's radius in meters
-  const φ1 = point1.latitude * Math.PI/180;
-  const φ2 = point2.latitude * Math.PI/180;
-  const Δφ = (point2.latitude - point1.latitude) * Math.PI/180;
-  const Δλ = (point2.longitude - point1.longitude) * Math.PI/180;
-
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-  return R * c; // Distance in meters
-}
-
-function calculateProgress(currentDistance) {
-  const totalDistance = alarmSettings.initialDistance;
-  return Math.max(0, Math.min(100, ((totalDistance - currentDistance) / totalDistance) * 100));
-}
-
-function sendStatusNotification(type, estimatedTime) {
+function showJourneyNotification(type, progress = 0, remainingDistance = 0) {
   const title = 'OpenTravel';
   const options = {
     icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
     badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    tag: 'opentravel-status',
+    tag: 'opentravel-journey',
     renotify: true,
     requireInteraction: true,
     actions: [{ action: 'open', title: 'View' }],
-    timestamp: Date.now()
+    data: { type, progress }
   };
 
+  let body = '';
+  let silent = false;
+
   if (type === 'start') {
-    options.body = `Arrival by ${formatTime(estimatedTime.end)}`;
-    options.data = { type: 'start', progress: 0 };
+    const estimatedTime = calculateEstimatedTime();
+    body = `Journey started. Estimated arrival by ${formatTime(estimatedTime)}`;
+  } else if (type === 'progress') {
+    body = `${formatDistance(remainingDistance)} to destination`;
+    silent = true;
   } else if (type === 'end') {
-    options.body = 'You have reached your destination!';
-    options.data = { type: 'end', progress: 100 };
+    body = 'You have reached your destination!';
     options.vibrate = [200, 100, 200];
   }
 
-  self.registration.showNotification(title, options).then((notification) => {
-    notificationId = notification.tag;
-  });
-}
+  options.body = body;
+  options.silent = silent;
 
-function updateNotificationProgress(progress) {
-  if (notificationId) {
-    self.registration.getNotifications({ tag: notificationId }).then((notifications) => {
-      if (notifications.length > 0) {
-        const notification = notifications[0];
-        const updatedOptions = {
-          ...notification.options,
-          data: { ...notification.data, progress: progress }
-        };
-        self.registration.showNotification(notification.title, updatedOptions);
-      }
-    });
-  }
+  self.registration.showNotification(title, options);
 }
 
 function calculateEstimatedTime() {
-  const now = new Date();
+  if (!journeyState.active) return null;
+  
   const speed = 50; // assumed average speed in km/h
-  const distance = alarmSettings.initialDistance;
-  const timeInHours = distance / (speed * 1000); // convert distance to km
+  const timeInHours = journeyState.initialDistance / (speed * 1000);
   const timeInMs = timeInHours * 60 * 60 * 1000;
   
-  return {
-    start: now,
-    end: new Date(now.getTime() + timeInMs)
-  };
+  return new Date(journeyState.startTime.getTime() + timeInMs);
 }
 
 function formatTime(date) {
-  return date.toLocaleTimeString('en-US', { 
-    hour: 'numeric', 
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
     minute: '2-digit',
-    hour12: true 
+    hour12: true
   });
+}
+
+function formatDistance(meters) {
+  return meters > 1000 
+    ? `${(meters/1000).toFixed(1)} km`
+    : `${Math.round(meters)} m`;
 }
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   if (event.action === 'open') {
     clients.openWindow('/');
-  }
-});
-
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'alarm-sync') {
-    event.waitUntil(checkLocation());
   }
 });
