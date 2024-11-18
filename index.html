@@ -188,15 +188,10 @@
             showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
             
             // Stop background sync
-            if ('serviceWorker' in navigator && 'SyncManager' in window) {
+            if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.ready.then(registration => {
                     registration.sync.unregister('alarm-sync');
                 });
-            }
-
-            // Stop periodic sync
-            if ('serviceWorker' in navigator && 'periodicSync' in registration) {
-                registration.periodicSync.unregister('location-update');
             }
         }
 
@@ -307,16 +302,9 @@
                         isAlarmActive = true;
 
                         // Register for background sync
-                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                        if ('serviceWorker' in navigator) {
                             navigator.serviceWorker.ready.then(registration => {
                                 registration.sync.register('alarm-sync');
-                            });
-                        }
-
-                        // Register for periodic sync
-                        if ('serviceWorker' in navigator && 'periodicSync' in registration) {
-                            registration.periodicSync.register('location-update', {
-                                minInterval: settings.updateInterval * 60 * 1000 // Convert minutes to milliseconds
                             });
                         }
 
@@ -332,8 +320,8 @@
                             });
                         }
 
-                        // Request wake lock
-                        requestWakeLock();
+                        // Start background updates
+                        startBackgroundUpdates();
                     } else {
                         showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
                     }
@@ -365,17 +353,15 @@
             }
         }
 
-        // Request wake lock
-        async function requestWakeLock() {
-            if ('wakeLock' in navigator) {
-                try {
-                    await navigator.wakeLock.request('screen');
-                    console.log('Wake Lock is active');
-                } catch (err) {
-                    console.error(`${err.name}, ${err.message}`);
-                }
-            } else {
-                console.log('Wake Lock API not supported');
+        // Start background updates
+        function startBackgroundUpdates() {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.active.postMessage({
+                        type: 'START_BACKGROUND_UPDATES',
+                        settings: settings
+                    });
+                });
             }
         }
 
@@ -425,14 +411,9 @@
                         requestBackgroundPermission();
                     }
 
-                    // Update periodic sync interval
-                    if (isAlarmActive && 'serviceWorker' in navigator && 'periodicSync' in registration) {
-                        registration.periodicSync.unregister('location-update')
-                            .then(() => {
-                                return registration.periodicSync.register('location-update', {
-                                    minInterval: settings.updateInterval * 60 * 1000 // Convert minutes to milliseconds
-                                });
-                            });
+                    // Update background updates interval
+                    if (isAlarmActive) {
+                        startBackgroundUpdates();
                     }
                 }
                 showAlert('Settings saved successfully!', 'success');
@@ -520,9 +501,7 @@
                     audio.src = 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3';
                     break;
                 case 'radar':
-                    audio.src = 'https://assets.mix
-
-kit.co/active_storage/sfx/2569/2569-preview.mp3';
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2569/2569-preview.mp3';
                     break;
                 case 'beacon':
                     audio.src = 'https://assets.mixkit.co/active_storage/sfx/2570/2570-preview.mp3';
