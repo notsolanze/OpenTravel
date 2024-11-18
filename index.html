@@ -144,7 +144,6 @@
         let isAlarmPlaying = false;
         let isAlarmActive = false;
         let backgroundInterval;
-        let serviceWorkerRegistration = null;
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
@@ -178,6 +177,9 @@
                 if ('vibrate' in navigator) {
                     navigator.vibrate([200, 100, 200]);
                 }
+
+                // Show notification
+                showNotification('OpenTravel Alarm', 'You have reached your destination!');
             }
         }
 
@@ -245,6 +247,11 @@
         function updateDistanceDisplay(distance, progress) {
             const distanceText = `Distance: ${formatNumber(Math.round(distance))} meters`;
             document.getElementById('distance').textContent = distanceText;
+            
+            // Update notification if enabled
+            if (settings.enableNotifications) {
+                showProgressNotification('OpenTravel Progress', distanceText, progress);
+            }
         }
 
         // Format number with commas
@@ -313,24 +320,18 @@
                         sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
                         isAlarmActive = true;
 
-                        // Start journey in service worker
-                        if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
-                            console.log('Sending START_JOURNEY message to service worker');
-                            serviceWorkerRegistration.active.postMessage({
-                                type: 'START_JOURNEY',
-                                settings: {
-                                    destination: destination,
-                                    radius: alarmRadius,
-                                    updateInterval: settings.updateInterval
-                                }
+                        // Register for background sync
+                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                            navigator.serviceWorker.ready.then(function(reg) {
+                                return reg.sync.register('alarm-sync');
+                            }).catch(function(err) {
+                                console.log('Background sync failed:', err);
                             });
-                        } else {
-                            console.error('Service worker not ready. Retrying in 1 second...');
-                            setTimeout(setAlarm, 1000);
-                            return;
                         }
 
-                        showAlert('Alarm set successfully!', 'success');
+                        // Start background updates and send initial notification
+                        startBackgroundUpdates();
+                        sendInitialNotification(destination);
                     } else {
                         showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
                     }
@@ -341,28 +342,135 @@
                 });
         }
 
-        function checkNotificationSupport() {
-            if (!('Notification' in window)) {
-                console.error('This browser does not support notifications');
-                return false;
+        // Show notification
+        function showNotification(title, body) {
+            if ("Notification" in window) {
+                if (Notification.permission === "granted") {
+                    sendNotification(title, body);
+                } else if (Notification.permission !== "denied") {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === "granted") {
+                            sendNotification(title, body);
+                        }
+                    });
+                }
             }
 
-            if (Notification.permission === 'denied') {
-                console.warn('Notifications are blocked by the user');
-                showAlert('Please enable notifications in your browser settings for this site to receive alerts.', 'warning');
-                return false;
+            // For iOS Safari when in standalone mode (PWA)
+            if (window.navigator.standalone) {
+                // Use local notification
+                if ("Notification" in window) {
+                    new Notification(title, { body: body });
+                }
             }
+        }
 
-            if (Notification.permission !== 'granted') {
-                Notification.requestPermission().then(permission => {
-                    if (permission !== 'granted') {
-                        console.warn('Notification permission not granted');
-                        showAlert('Notifications are not enabled. You may miss important alerts.', 'warning');
-                    }
+        function showProgressNotification(title, body, progress) {
+            const options = {
+                body: body,
+                icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                tag: 'opentravel-update',
+                renotify: true,
+                data: {
+                    progress: progress
+                }
+            };
+
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.showNotification(title, options);
                 });
+            } else {
+                new Notification(title, options);
+            }
+        }
+
+        // Start background updates
+        function startBackgroundUpdates() {
+            if (backgroundInterval) {
+                clearInterval(backgroundInterval);
             }
 
-            return true;
+            backgroundInterval = setInterval(() => {
+                if (document.hidden) {
+                    checkLocationAndNotify();
+                }
+            }, settings.updateInterval * 1000); // Convert seconds to milliseconds
+
+            // Listen for visibility changes
+            document.addEventListener("visibilitychange", function() {
+                if (document.hidden) {
+                    checkLocationAndNotify();
+                }
+            });
+        }
+
+        // Check location and send notification
+        function checkLocationAndNotify() {
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    const distance = calculateDistance(position.coords, {latitude: destination[0], longitude: destination[1]});
+                    const progress = calculateProgress(distance);
+                    const formattedDistance = formatDistance(distance);
+                    showProgressNotification('OpenTravel Progress', `Current distance: ${formattedDistance}`, progress);
+                },
+                error => {
+                    console.error('Error getting location:', error);
+                }
+            );
+        }
+
+        // Send initial notification
+        function sendInitialNotification(destination) {
+          navigator.geolocation.getCurrentPosition(
+            position => {
+              const distance = calculateDistance(
+                position.coords, 
+                {latitude: destination[0], longitude: destination[1]}
+              );
+              if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.ready.then(registration => {
+                  registration.active.postMessage({
+                    type: 'START_BACKGROUND_UPDATES',
+                    settings: {
+                      destination: destination,
+                      radius: alarmRadius,
+                      initialDistance: distance,
+                      updateInterval: settings.updateInterval
+                    }
+                  });
+                });
+              }
+            },
+            error => {
+              console.error('Error getting initial location:', error);
+              showAlert('Unable to get initial location. Monitoring started anyway.', 'info');
+            }
+          );
+        }
+
+        // Calculate distance between two points
+        function calculateDistance(point1, point2) {
+            const R = 6371e3; // Earth's radius in meters
+            const φ1 = point1.latitude * Math.PI/180;
+            const φ2 = point2.latitude * Math.PI/180;
+            const Δφ = (point2.latitude - point1.latitude) * Math.PI/180;
+            const Δλ = (point2.longitude - point1.longitude) * Math.PI/180;
+
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                        Math.cos(φ1) * Math.cos(φ2) *
+                        Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+            return R * c; // Distance in meters
+        }
+
+        // Format distance
+        function formatDistance(meters) {
+            return meters > 1000 
+                ? `${(meters/1000).toFixed(1)} km` 
+                : `${Math.round(meters)} m`;
         }
 
         // Initialize the app
@@ -401,6 +509,11 @@
                     
                     if (newEnableNotifications && Notification.permission !== "granted") {
                         Notification.requestPermission();
+                    }
+
+                    // Update background updates interval
+                    if (isAlarmActive) {
+                        startBackgroundUpdates();
                     }
                 }
                 showAlert('Settings saved successfully!', 'success');
@@ -460,36 +573,15 @@
                 Notification.requestPermission();
             }
 
-            // Check notification support
-            checkNotificationSupport();
-
             // Register service worker
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('/service-worker.js')
                     .then(registration => {
                         console.log('Service Worker registered with scope:', registration.scope);
-                        serviceWorkerRegistration = registration;
-                        
-                        // Ensure the service worker is updated to the latest version
-                        registration.update();
-
-                        // Wait for the service worker to become active
-                        if (registration.installing) {
-                            registration.installing.addEventListener('statechange', function() {
-                                if (this.state === 'activated') {
-                                    console.log('Service worker activated');
-                                }
-                            });
-                        }
                     })
                     .catch(error => {
                         console.error('Service Worker registration failed:', error);
                     });
-
-                // Listen for service worker state changes
-                navigator.serviceWorker.addEventListener('controllerchange', () => {
-                    console.log('Service worker controller changed');
-                });
             }
 
             // Listen for messages from the service worker
@@ -549,11 +641,6 @@
                 alertIcon.classList.add('bg-blue-100');
                 alertIcon.innerHTML = '<i data-lucide="info" class="w-5 h-5 text-blue-500"></i>';
                 alertTitle.textContent = 'Information';
-            } else if (type === 'warning') {
-                alertPopup.classList.add('border-l-4', 'border-yellow-500');
-                alertIcon.classList.add('bg-yellow-100');
-                alertIcon.innerHTML = '<i data-lucide="alert-triangle" class="w-5 h-5 text-yellow-500"></i>';
-                alertTitle.textContent = 'Warning!';
             } else {
                 alertPopup.classList.add('border-l-4', 'border-red-500');
                 alertIcon.classList.add('bg-red-100');
@@ -577,8 +664,8 @@
             const alertPopup = document.getElementById('alertPopup');
             alertPopup.classList.remove('opacity-100', 'translate-y-0');
             alertPopup.classList.add('opacity-0', '-translate-y-full');
-            alertPopup.classList.remove('border-l-4', 'border-green-500', 'border-red-500', 'border-blue-500', 'border-yellow-500');
-            document.getElementById('alertIcon').classList.remove('bg-green-100', 'bg-red-100', 'bg-blue-100', 'bg-yellow-100');
+            alertPopup.classList.remove('border-l-4', 'border-green-500', 'border-red-500', 'border-blue-500');
+            document.getElementById('alertIcon').classList.remove('bg-green-100', 'bg-red-100', 'bg-blue-100');
         }
     </script>
 </body>
