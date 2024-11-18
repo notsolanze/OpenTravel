@@ -107,7 +107,7 @@
             </div>
             <div class="mb-4">
                 <label class="flex items-center">
-                    <input type="checkbox" id="enableNotifications" class="form-checkbox h-5 w-5 text-green-600" checked>
+                    <input type="checkbox" id="enableNotifications" class="form-checkbox h-5 w-5 text-green-600">
                     <span class="ml-2 text-sm text-gray-700">Enable Notifications</span>
                 </label>
             </div>
@@ -141,9 +141,7 @@
     <script>
         let map, userMarker, destinationMarker, circle;
         let watchId, destination, alarmRadius;
-        let isAlarmPlaying = false;
         let isAlarmActive = false;
-        let backgroundInterval;
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
@@ -159,52 +157,6 @@
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenTravel'
             }).addTo(map);
-        }
-
-        // Play alarm
-        function playAlarm() {
-            if (!isAlarmPlaying) {
-                const audio = document.getElementById('alarmAudio');
-                audio.volume = settings.volume;
-                audio.play();
-                isAlarmPlaying = true;
-                console.log('Playing alarm sound');
-                
-                document.getElementById('stopAlarm').classList.remove('hidden');
-                document.getElementById('setAlarm').classList.add('hidden');
-                
-                // Vibrate if supported
-                if ('vibrate' in navigator) {
-                    navigator.vibrate([200, 100, 200]);
-                }
-
-                // Show notification
-                showNotification('OpenTravel Alarm', 'You have reached your destination!');
-            }
-        }
-
-        // Stop alarm
-        function stopAlarm() {
-            const audio = document.getElementById('alarmAudio');
-            audio.pause();
-            audio.currentTime = 0;
-            isAlarmPlaying = false;
-            isAlarmActive = false;
-            document.getElementById('stopAlarm').classList.add('hidden');
-            document.getElementById('setAlarm').classList.remove('hidden');
-            showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
-            
-            // Stop background sync
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.ready.then(registration => {
-                    registration.sync.unregister('alarm-sync');
-                });
-            }
-
-            // Clear background interval
-            if (backgroundInterval) {
-                clearInterval(backgroundInterval);
-            }
         }
 
         // Update user location
@@ -229,8 +181,8 @@
                 const progress = calculateProgress(distance);
                 updateDistanceDisplay(distance, progress);
                 
-                if (distance <= alarmRadius && !isAlarmPlaying) {
-                    playAlarm();
+                if (distance <= alarmRadius) {
+                    stopAlarm();
                     document.getElementById('status').textContent = 'You have reached your destination!';
                     document.getElementById('status').classList.add('text-green-600', 'font-semibold');
                 }
@@ -248,9 +200,13 @@
             const distanceText = `Distance: ${formatNumber(Math.round(distance))} meters`;
             document.getElementById('distance').textContent = distanceText;
             
-            // Update notification if enabled
-            if (settings.enableNotifications) {
-                showProgressNotification('OpenTravel Progress', distanceText, progress);
+            // Update notification progress
+            if (settings.enableNotifications && 'serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'UPDATE_PROGRESS',
+                    progress: progress,
+                    distance: distanceText
+                });
             }
         }
 
@@ -320,18 +276,11 @@
                         sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
                         isAlarmActive = true;
 
-                        // Register for background sync
-                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
-                            navigator.serviceWorker.ready.then(function(reg) {
-                                return reg.sync.register('alarm-sync');
-                            }).catch(function(err) {
-                                console.log('Background sync failed:', err);
-                            });
-                        }
+                        // Start journey
+                        startJourney(destination);
 
-                        // Start background updates and send initial notification
-                        startBackgroundUpdates();
-                        sendInitialNotification(destination);
+                        document.getElementById('stopAlarm').classList.remove('hidden');
+                        document.getElementById('setAlarm').classList.add('hidden');
                     } else {
                         showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
                     }
@@ -342,112 +291,47 @@
                 });
         }
 
-        // Show notification
-        function showNotification(title, body) {
-            if ("Notification" in window) {
-                if (Notification.permission === "granted") {
-                    sendNotification(title, body);
-                } else if (Notification.permission !== "denied") {
-                    Notification.requestPermission().then(permission => {
-                        if (permission === "granted") {
-                            sendNotification(title, body);
-                        }
-                    });
-                }
-            }
-
-            // For iOS Safari when in standalone mode (PWA)
-            if (window.navigator.standalone) {
-                // Use local notification
-                if ("Notification" in window) {
-                    new Notification(title, { body: body });
-                }
-            }
-        }
-
-        function showProgressNotification(title, body, progress) {
-            const options = {
-                body: body,
-                icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                tag: 'opentravel-update',
-                renotify: true,
-                data: {
-                    progress: progress
-                }
-            };
-
-            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.ready.then(registration => {
-                    registration.showNotification(title, options);
-                });
-            } else {
-                new Notification(title, options);
-            }
-        }
-
-        // Start background updates
-        function startBackgroundUpdates() {
-            if (backgroundInterval) {
-                clearInterval(backgroundInterval);
-            }
-
-            backgroundInterval = setInterval(() => {
-                if (document.hidden) {
-                    checkLocationAndNotify();
-                }
-            }, settings.updateInterval * 1000); // Convert seconds to milliseconds
-
-            // Listen for visibility changes
-            document.addEventListener("visibilitychange", function() {
-                if (document.hidden) {
-                    checkLocationAndNotify();
-                }
-            });
-        }
-
-        // Check location and send notification
-        function checkLocationAndNotify() {
+        // Start journey
+        function startJourney(destination) {
             navigator.geolocation.getCurrentPosition(
                 position => {
-                    const distance = calculateDistance(position.coords, {latitude: destination[0], longitude: destination[1]});
-                    const progress = calculateProgress(distance);
-                    const formattedDistance = formatDistance(distance);
-                    showProgressNotification('OpenTravel Progress', `Current distance: ${formattedDistance}`, progress);
+                    const initialDistance = calculateDistance(
+                        position.coords, 
+                        {latitude: destination[0], longitude: destination[1]}
+                    );
+                    if (settings.enableNotifications && 'serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.controller.postMessage({
+                            type: 'START_JOURNEY',
+                            settings: {
+                                destination: destination,
+                                radius: alarmRadius,
+                                initialDistance: initialDistance,
+                                updateInterval: settings.updateInterval
+                            }
+                        });
+                    }
                 },
                 error => {
-                    console.error('Error getting location:', error);
+                    console.error('Error getting initial location:', error);
+                    showAlert('Unable to get initial location. Journey started anyway.', 'info');
                 }
             );
         }
 
-        // Send initial notification
-        function sendInitialNotification(destination) {
-          navigator.geolocation.getCurrentPosition(
-            position => {
-              const distance = calculateDistance(
-                position.coords, 
-                {latitude: destination[0], longitude: destination[1]}
-              );
-              if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.ready.then(registration => {
-                  registration.active.postMessage({
-                    type: 'START_BACKGROUND_UPDATES',
-                    settings: {
-                      destination: destination,
-                      radius: alarmRadius,
-                      initialDistance: distance,
-                      updateInterval: settings.updateInterval
-                    }
-                  });
-                });
-              }
-            },
-            error => {
-              console.error('Error getting initial location:', error);
-              showAlert('Unable to get initial location. Monitoring started anyway.', 'info');
+        // Stop alarm
+        function stopAlarm() {
+            isAlarmActive = false;
+            document.getElementById('stopAlarm').classList.add('hidden');
+            document.getElementById('setAlarm').classList.remove('hidden');
+            showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
+            
+            if (settings.enableNotifications && 'serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({ type: 'STOP_JOURNEY' });
             }
-          );
+
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+            }
         }
 
         // Calculate distance between two points
@@ -464,13 +348,6 @@
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
             return R * c; // Distance in meters
-        }
-
-        // Format distance
-        function formatDistance(meters) {
-            return meters > 1000 
-                ? `${(meters/1000).toFixed(1)} km` 
-                : `${Math.round(meters)} m`;
         }
 
         // Initialize the app
@@ -511,9 +388,8 @@
                         Notification.requestPermission();
                     }
 
-                    // Update background updates interval
                     if (isAlarmActive) {
-                        startBackgroundUpdates();
+                        startJourney(destination);
                     }
                 }
                 showAlert('Settings saved successfully!', 'success');
@@ -583,13 +459,6 @@
                         console.error('Service Worker registration failed:', error);
                     });
             }
-
-            // Listen for messages from the service worker
-            navigator.serviceWorker.addEventListener('message', (event) => {
-                if (event.data && event.data.type === 'LOCATION_UPDATE') {
-                    updateLocation(event.data.position);
-                }
-            });
         });
 
         function updateAlarmSound() {
