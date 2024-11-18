@@ -58,6 +58,12 @@
             100% { transform: rotate(360deg); }
         }
     </style>
+    <script>
+        // Request permission for notifications as soon as possible
+        if ('Notification' in window) {
+            Notification.requestPermission();
+        }
+    </script>
 </head>
 <body class="bg-gray-100">
     <div id="loadingScreen" class="loading-screen">
@@ -231,8 +237,8 @@
                 return;
             }
 
-            if (isMobileDevice()) {
-                showAlert('On mobile devices, notifications may not work when the app is in the background. Keep the app open for best results.', 'info');
+            if (isIOS()) {
+                showAlert('On iOS, keep the app open or add it to your home screen for the best experience. Notifications may not work when the app is in the background.', 'info');
             }
 
             fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destinationInput)}, Philippines`)
@@ -402,8 +408,17 @@
         // Show notification
         function showNotification(title, body) {
             if ("Notification" in window && Notification.permission === "granted") {
-                if (navigator.userAgent.match(/Android/i)) {
-                    // For Android, use service worker to show notification
+                if (navigator.userAgent.match(/iPhone|iPad|iPod/i)) {
+                    // iOS-specific handling
+                    if (window.navigator.standalone) {
+                        // App is in standalone mode (added to home screen)
+                        new Notification(title, { body: body });
+                    } else {
+                        // Fallback for Safari
+                        showAlert(`${title}: ${body}`, 'info');
+                    }
+                } else if (navigator.userAgent.match(/Android/i)) {
+                    // Android-specific handling
                     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
                         navigator.serviceWorker.ready.then(registration => {
                             registration.showNotification(title, {
@@ -412,16 +427,16 @@
                                 vibrate: [200, 100, 200]
                             });
                         });
+                    } else {
+                        new Notification(title, { body: body });
                     }
                 } else {
-                    // For other platforms, use regular Notification
+                    // Desktop or other platforms
                     new Notification(title, { body: body });
                 }
-            } else if (window.navigator.standalone) {
-                // For iOS when in standalone mode (PWA)
-                alert(`${title}: ${body}`);
             } else {
-                showAlert(body, 'info');
+                // Fallback if notifications are not supported or permitted
+                showAlert(`${title}: ${body}`, 'info');
             }
         }
 
@@ -436,7 +451,7 @@
 
             backgroundInterval = setInterval(() => {
                 const now = Date.now();
-                if (document.hidden && now - lastUpdateTime >= minInterval) {
+                if ((document.hidden || isIOS()) && now - lastUpdateTime >= minInterval) {
                     checkLocationAndNotify();
                     lastUpdateTime = now;
                 }
@@ -444,7 +459,7 @@
 
             // Listen for visibility changes
             document.addEventListener("visibilitychange", function() {
-                if (!document.hidden) {
+                if (!document.hidden || isIOS()) {
                     checkLocationAndNotify();
                     lastUpdateTime = Date.now();
                 }
@@ -632,6 +647,8 @@
             // Hide loading screen and show app
             document.getElementById('loadingScreen').style.display = 'none';
             document.getElementById('app').classList.remove('hidden');
+
+            showAddToHomeScreenPrompt();
         });
 
         function updateAlarmSound() {
@@ -710,8 +727,22 @@
             document.getElementById('alertIcon').classList.remove('bg-green-100', 'bg-red-100', 'bg-blue-100');
         }
 
-        function isMobileDevice() {
-            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        function isIOS() {
+            return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        }
+
+        // Add to home screen prompt for iOS
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            showAddToHomeScreenPrompt();
+        });
+
+        function showAddToHomeScreenPrompt() {
+            if (isIOS() && !window.navigator.standalone) {
+                showAlert('For the best experience, add this app to your home screen.', 'info');
+            }
         }
     </script>
 </body>
