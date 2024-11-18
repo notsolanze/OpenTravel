@@ -12,37 +12,9 @@ const urlsToCache = [
 ];
 
 self.addEventListener('install', (event) => {
-  console.log('Service worker installing...');
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('Cache opened');
-        return cache.addAll(urlsToCache);
-      })
-      .then(() => {
-        console.log('Service worker installed');
-        return self.skipWaiting();
-      })
-  );
-});
-
-self.addEventListener('activate', (event) => {
-  console.log('Service worker activating...');
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-    .then(() => {
-      console.log('Service worker activated');
-      return self.clients.claim();
-    })
+      .then((cache) => cache.addAll(urlsToCache))
   );
 });
 
@@ -53,52 +25,52 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
+  );
+});
+
 let alarmSettings = null;
-let notificationSent = { start: false, near: false };
+let notificationId = null;
 
 self.addEventListener('message', (event) => {
-  console.log('Service worker received message:', event.data);
   if (event.data && event.data.type === 'START_JOURNEY') {
     alarmSettings = event.data.settings;
-    notificationSent = { start: false, near: false };
     startJourney();
   }
 });
 
 function startJourney() {
   if (alarmSettings) {
-    console.log('Starting journey with settings:', alarmSettings);
-    sendStatusNotification('start')
-      .then(() => {
-        notificationSent.start = true;
-        setInterval(() => {
-          checkLocation();
-        }, alarmSettings.updateInterval * 1000);
-      });
-  } else {
-    console.error('No alarm settings available');
+    const estimatedTime = calculateEstimatedTime();
+    sendStatusNotification('start', estimatedTime);
+    setInterval(() => {
+      checkLocation();
+    }, alarmSettings.updateInterval * 1000);
   }
 }
 
 async function checkLocation() {
   try {
-    console.log('Checking location...');
     const position = await getCurrentPosition();
     const distance = calculateDistance(
       position.coords, 
       {latitude: alarmSettings.destination[0], longitude: alarmSettings.destination[1]}
     );
-    
-    console.log('Current distance:', distance);
-    
-    if (distance <= 300 && !notificationSent.near) {
-      console.log('Within 300 meters, sending notification');
-      await sendStatusNotification('near');
-      notificationSent.near = true;
-    }
+    const progress = calculateProgress(distance);
+    updateNotificationProgress(progress);
     
     if (distance <= alarmSettings.radius) {
-      console.log('Destination reached, unregistering service worker');
+      sendStatusNotification('end');
       self.registration.unregister();
     }
   } catch (error) {
@@ -131,7 +103,12 @@ function calculateDistance(point1, point2) {
   return R * c; // Distance in meters
 }
 
-function sendStatusNotification(type) {
+function calculateProgress(currentDistance) {
+  const totalDistance = alarmSettings.initialDistance;
+  return Math.max(0, Math.min(100, ((totalDistance - currentDistance) / totalDistance) * 100));
+}
+
+function sendStatusNotification(type, estimatedTime) {
   const title = 'OpenTravel';
   const options = {
     icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
@@ -144,20 +121,53 @@ function sendStatusNotification(type) {
   };
 
   if (type === 'start') {
-    options.body = 'Your journey has started!';
-  } else if (type === 'near') {
-    options.body = 'You are within 300 meters of your destination!';
+    options.body = `Arrival by ${formatTime(estimatedTime.end)}`;
+    options.data = { type: 'start', progress: 0 };
+  } else if (type === 'end') {
+    options.body = 'You have reached your destination!';
+    options.data = { type: 'end', progress: 100 };
     options.vibrate = [200, 100, 200];
   }
 
-  console.log('Sending notification:', type);
-  return self.registration.showNotification(title, options)
-    .then(() => {
-      console.log('Notification sent successfully:', type);
-    })
-    .catch((error) => {
-      console.error('Error sending notification:', error);
+  self.registration.showNotification(title, options).then((notification) => {
+    notificationId = notification.tag;
+  });
+}
+
+function updateNotificationProgress(progress) {
+  if (notificationId) {
+    self.registration.getNotifications({ tag: notificationId }).then((notifications) => {
+      if (notifications.length > 0) {
+        const notification = notifications[0];
+        const updatedOptions = {
+          ...notification.options,
+          data: { ...notification.data, progress: progress }
+        };
+        self.registration.showNotification(notification.title, updatedOptions);
+      }
     });
+  }
+}
+
+function calculateEstimatedTime() {
+  const now = new Date();
+  const speed = 50; // assumed average speed in km/h
+  const distance = alarmSettings.initialDistance;
+  const timeInHours = distance / (speed * 1000); // convert distance to km
+  const timeInMs = timeInHours * 60 * 60 * 1000;
+  
+  return {
+    start: now,
+    end: new Date(now.getTime() + timeInMs)
+  };
+}
+
+function formatTime(date) {
+  return date.toLocaleTimeString('en-US', { 
+    hour: 'numeric', 
+    minute: '2-digit',
+    hour12: true 
+  });
 }
 
 self.addEventListener('notificationclick', (event) => {
@@ -172,5 +182,3 @@ self.addEventListener('sync', (event) => {
     event.waitUntil(checkLocation());
   }
 });
-
-console.log('Service worker script loaded');
