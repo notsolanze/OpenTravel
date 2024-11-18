@@ -58,12 +58,6 @@
             100% { transform: rotate(360deg); }
         }
     </style>
-    <script>
-        // Request permission for notifications as soon as possible
-        if ('Notification' in window) {
-            Notification.requestPermission();
-        }
-    </script>
 </head>
 <body class="bg-gray-100">
     <div id="loadingScreen" class="loading-screen">
@@ -163,12 +157,23 @@
         </div>
     </div>
 
+    <div id="iosInstructions" class="hidden p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700">
+        <h3 class="font-bold">For the best experience on iOS:</h3>
+        <ol class="list-decimal list-inside mt-2">
+            <li>Tap the share button at the bottom of the browser</li>
+            <li>Scroll down and select "Add to Home Screen"</li>
+            <li>Tap "Add" in the top right corner</li>
+            <li>Open the app from your home screen</li>
+        </ol>
+    </div>
+
     <script>
         let map, userMarker, destinationMarker, circle;
         let watchId, destination, alarmRadius;
         let isAlarmPlaying = false;
         let isAlarmActive = false;
         let backgroundInterval;
+        let notificationCheckInterval;
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
@@ -292,15 +297,6 @@
                         sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
                         isAlarmActive = true;
 
-                        // Register for background sync
-                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
-                            navigator.serviceWorker.ready.then(function(reg) {
-                                return reg.sync.register('alarm-sync');
-                            }).catch(function(err) {
-                                console.log('Background sync failed:', err);
-                            });
-                        }
-
                         // Start background updates and send initial notification
                         startBackgroundUpdates();
                         sendInitialNotification(destination);
@@ -347,13 +343,6 @@
             document.getElementById('setAlarm').classList.remove('hidden');
             showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
             
-            // Stop background sync
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.ready.then(registration => {
-                    registration.sync.unregister('alarm-sync');
-                });
-            }
-
             // Clear background interval
             if (backgroundInterval) {
                 clearInterval(backgroundInterval);
@@ -408,16 +397,16 @@
         // Show notification
         function showNotification(title, body) {
             if ("Notification" in window && Notification.permission === "granted") {
-                if (navigator.userAgent.match(/iPhone|iPad|iPod/i)) {
+                if (isIOS()) {
                     // iOS-specific handling
                     if (window.navigator.standalone) {
                         // App is in standalone mode (added to home screen)
-                        new Notification(title, { body: body });
+                        showAlert(`${title}: ${body}`, 'info');
                     } else {
                         // Fallback for Safari
-                        showAlert(`${title}: ${body}`, 'info');
+                        alert(`${title}: ${body}`);
                     }
-                } else if (navigator.userAgent.match(/Android/i)) {
+                } else if (isAndroid()) {
                     // Android-specific handling
                     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
                         navigator.serviceWorker.ready.then(registration => {
@@ -648,7 +637,15 @@
             document.getElementById('loadingScreen').style.display = 'none';
             document.getElementById('app').classList.remove('hidden');
 
-            showAddToHomeScreenPrompt();
+            // Show iOS instructions if applicable
+            if (isIOS()) {
+                document.getElementById('iosInstructions').classList.remove('hidden');
+            }
+
+            // Start notification polling for iOS
+            if (isIOS()) {
+                startNotificationPolling();
+            }
         });
 
         function updateAlarmSound() {
@@ -731,18 +728,36 @@
             return /iPhone|iPad|iPod/i.test(navigator.userAgent);
         }
 
-        // Add to home screen prompt for iOS
-        let deferredPrompt;
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            showAddToHomeScreenPrompt();
-        });
+        function isAndroid() {
+            return /Android/i.test(navigator.userAgent);
+        }
 
-        function showAddToHomeScreenPrompt() {
-            if (isIOS() && !window.navigator.standalone) {
-                showAlert('For the best experience, add this app to your home screen.', 'info');
+        function startNotificationPolling() {
+            if (notificationCheckInterval) {
+                clearInterval(notificationCheckInterval);
             }
+            
+            notificationCheckInterval = setInterval(() => {
+                checkForNotifications();
+            }, 60000); // Check every minute
+        }
+
+        async function checkForNotifications() {
+            try {
+                const response = await fetch('/api/check-notifications');
+                const data = await response.json();
+                
+                if (data.hasNotification) {
+                    showNotification(data.title, data.message);
+                }
+            } catch (error) {
+                console.error('Error checking for notifications:', error);
+            }
+        }
+
+        // Request notification permission
+        if ("Notification" in window) {
+            Notification.requestPermission();
         }
     </script>
 </body>
