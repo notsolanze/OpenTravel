@@ -5,7 +5,7 @@ const urlsToCache = [
   'https://cdn.tailwindcss.com',
   'https://unpkg.com/leaflet@1.7.1/dist/leaflet.css',
   'https://unpkg.com/leaflet@1.7.1/dist/leaflet.js',
-  '//fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap',
+  'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap',
   'https://unpkg.com/lucide@latest',
   'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
   'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'
@@ -59,7 +59,7 @@ function startBackgroundUpdates() {
 async function checkLocation() {
   try {
     const position = await getCurrentPosition();
-    const distance = calculateDistance(position.coords, alarmSettings.destination);
+    const distance = calculateDistance(position.coords, {latitude: alarmSettings.destination[0], longitude: alarmSettings.destination[1]});
     sendDistanceNotification(distance);
   } catch (error) {
     console.error('Error checking location:', error);
@@ -79,9 +79,9 @@ function getCurrentPosition() {
 function calculateDistance(position1, position2) {
   const R = 6371e3; // Earth's radius in meters
   const φ1 = position1.latitude * Math.PI/180;
-  const φ2 = position2[0] * Math.PI/180;
-  const Δφ = (position2[0] - position1.latitude) * Math.PI/180;
-  const Δλ = (position2[1] - position1.longitude) * Math.PI/180;
+  const φ2 = position2.latitude * Math.PI/180;
+  const Δφ = (position2.latitude - position1.latitude) * Math.PI/180;
+  const Δλ = (position2.longitude - position1.longitude) * Math.PI/180;
 
   const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
             Math.cos(φ1) * Math.cos(φ2) *
@@ -115,5 +115,11 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   if (event.action === 'open') {
     clients.openWindow('/');
+  }
+});
+
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'alarm-sync') {
+    event.waitUntil(checkLocation());
   }
 });
