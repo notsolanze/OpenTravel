@@ -10,6 +10,8 @@
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#10B981">
     <style>
         body {
             font-family: 'Space Grotesk', sans-serif;
@@ -484,6 +486,48 @@
             alertPopup.classList.add('opacity-0', '-translate-y-full');
             alertPopup.classList.remove('border-l-4', 'border-green-500', 'border-red-500', 'border-blue-500');
             document.getElementById('alertIcon').classList.remove('bg-green-100', 'bg-red-100', 'bg-blue-100');
+        }
+
+        let deferredPrompt;
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            // Show your custom "Add to Home Screen" button or banner here
+            showInstallPrompt();
+        });
+
+        function showInstallPrompt() {
+            // Create and show a button or banner to prompt installation
+            const installButton = document.createElement('button');
+            installButton.textContent = 'Install OpenTravel';
+            installButton.classList.add('fixed', 'bottom-4', 'right-4', 'bg-green-500', 'text-white', 'p-2', 'rounded-full', 'shadow-lg');
+            installButton.addEventListener('click', () => {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('User accepted the install prompt');
+                    } else {
+                        console.log('User dismissed the install prompt');
+                    }
+                    deferredPrompt = null;
+                });
+            });
+            document.body.appendChild(installButton);
+        }
+    </script>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then((registration) => {
+                        console.log('Service Worker registered successfully:', registration.scope);
+                    })
+                    .catch((error) => {
+                        console.log('Service Worker registration failed:', error);
+                    });
+            });
         }
     </script>
 </body>
