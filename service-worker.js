@@ -52,28 +52,38 @@ self.addEventListener('message', (event) => {
 
 function startJourney() {
   if (alarmSettings) {
-    sendStatusNotification('start');
-    notificationSent.start = true;
-    setInterval(() => {
-      checkLocation();
-    }, alarmSettings.updateInterval * 1000);
+    console.log('Starting journey with settings:', alarmSettings);
+    sendStatusNotification('start')
+      .then(() => {
+        notificationSent.start = true;
+        setInterval(() => {
+          checkLocation();
+        }, alarmSettings.updateInterval * 1000);
+      });
+  } else {
+    console.error('No alarm settings available');
   }
 }
 
 async function checkLocation() {
   try {
+    console.log('Checking location...');
     const position = await getCurrentPosition();
     const distance = calculateDistance(
       position.coords, 
       {latitude: alarmSettings.destination[0], longitude: alarmSettings.destination[1]}
     );
     
+    console.log('Current distance:', distance);
+    
     if (distance <= 300 && !notificationSent.near) {
-      sendStatusNotification('near');
+      console.log('Within 300 meters, sending notification');
+      await sendStatusNotification('near');
       notificationSent.near = true;
     }
     
     if (distance <= alarmSettings.radius) {
+      console.log('Destination reached, unregistering service worker');
       self.registration.unregister();
     }
   } catch (error) {
@@ -125,7 +135,14 @@ function sendStatusNotification(type) {
     options.vibrate = [200, 100, 200];
   }
 
-  self.registration.showNotification(title, options);
+  console.log('Sending notification:', type);
+  return self.registration.showNotification(title, options)
+    .then(() => {
+      console.log('Notification sent successfully:', type);
+    })
+    .catch((error) => {
+      console.error('Error sending notification:', error);
+    });
 }
 
 self.addEventListener('notificationclick', (event) => {
