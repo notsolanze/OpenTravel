@@ -350,10 +350,26 @@
         // Show notification
         function showNotification(title, body) {
             if ("Notification" in window && Notification.permission === "granted") {
-                new Notification(title, { 
+                const now = new Date();
+                const options = {
                     body: body,
-                    icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png'
-                });
+                    icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                    badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                    timestamp: now.getTime(),
+                    tag: 'distance-update',
+                    renotify: true,
+                    requireInteraction: true,
+                    silent: true,
+                    data: {
+                        timestamp: now.getTime()
+                    }
+                };
+
+                if (title === 'OpenTravel Distance Update') {
+                    options.actions = [{ action: 'open', title: 'View Map' }];
+                }
+
+                return new Notification(title, options);
             }
         }
 
@@ -616,6 +632,14 @@
             } else {
                 showAlert('Background location permission is not supported in this browser', 'error');
             }
+        }
+
+        function formatNotificationTime(date) {
+          return date.toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+          }).toUpperCase();
         }
 
         let deferredPrompt;
