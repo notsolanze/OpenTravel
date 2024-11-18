@@ -8,15 +8,10 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/128/10473/10473293.png">
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/localforage@1.10.0/dist/localforage.min.js"></script>
-    <script src="https://unpkg.com/leaflet.offline@2.2.0/dist/leaflet.offline.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#10B981">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/128/10473/10473293.png">
     <style>
         body {
             font-family: 'Space Grotesk', sans-serif;
@@ -35,41 +30,10 @@
         #alertPopup {
             z-index: 1000;
         }
-        .loading-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 255, 255, 0.9);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-        }
-        .spinner {
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #10B981;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
     </style>
 </head>
 <body class="bg-gray-100">
-    <div id="loadingScreen" class="loading-screen">
-        <div class="text-center">
-            <div class="spinner mx-auto mb-4"></div>
-            <p class="text-lg font-semibold text-gray-700">Loading OpenTravel...</p>
-        </div>
-    </div>
-
-    <div id="app" class="max-w-md mx-auto bg-white shadow-lg overflow-hidden min-h-screen hidden">
+    <div id="app" class="max-w-md mx-auto bg-white shadow-lg overflow-hidden min-h-screen">
         <div class="bg-green-500 text-white p-4 flex justify-between items-center">
             <h1 class="text-2xl font-bold">OpenTravel</h1>
             <button id="settingsBtn" class="p-2 rounded-full hover:bg-green-600 transition duration-300">
@@ -87,25 +51,13 @@
                     <label for="radius" class="block text-sm font-medium text-gray-700 mb-1">Alarm Radius (meters)</label>
                     <input type="number" id="radius" class="w-full p-3 border border-gray-300 rounded-full focus:ring-green-500 focus:border-green-500" value="1000">
                 </div>
-                <div class="flex justify-center space-x-4 mb-4">
+                <div class="flex justify-center space-x-4">
                     <button id="setAlarm" class="bg-green-500 text-white p-3 rounded-full hover:bg-green-600 transition duration-300">
                         <i data-lucide="bell" class="w-6 h-6"></i>
                     </button>
                     <button id="stopAlarm" class="bg-red-500 text-white p-3 rounded-full hover:bg-red-600 transition duration-300 hidden">
                         <i data-lucide="bell-off" class="w-6 h-6"></i>
                     </button>
-                </div>
-                <div class="mb-4">
-                    <label class="flex items-center">
-                        <input type="checkbox" id="enableOfflineMaps" class="form-checkbox h-5 w-5 text-green-600">
-                        <span class="ml-2 text-sm text-gray-700">Enable Offline Maps</span>
-                    </label>
-                </div>
-                <div id="offlineMapControls" class="mb-4 hidden">
-                    <button id="downloadOfflineMap" class="w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 transition duration-300 mb-2">
-                        Download Offline Map
-                    </button>
-                    <p id="offlineMapStatus" class="text-sm text-gray-600"></p>
                 </div>
                 <p id="status" class="mt-4 text-sm text-gray-600 text-center"></p>
             </div>
@@ -148,6 +100,14 @@
                 <label for="updateInterval" class="block text-sm font-medium text-gray-700 mb-1">Background Update Interval (minutes)</label>
                 <input type="number" id="updateInterval" class="w-full p-3 border border-gray-300 rounded-full focus:ring-green-500 focus:border-green-500" value="5" min="1" max="60">
             </div>
+            <div class="mb-4">
+                <label for="locationPermission" class="block text-sm font-medium text-gray-700 mb-1">Location Permission</label>
+                <select id="locationPermission" class="w-full p-3 border border-gray-300 rounded-full focus:ring-green-500 focus:border-green-500">
+                    <option value="always">Always</option>
+                    <option value="whileInUse">While Using the App</option>
+                    <option value="never">Never</option>
+                </select>
+            </div>
             <button id="saveSettings" class="w-full bg-green-500 text-white p-3 rounded-lg hover:bg-green-600 transition duration-300">
                 Save Settings
             </button>
@@ -171,169 +131,27 @@
         </div>
     </div>
 
-    <div id="iosInstructions" class="hidden p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700">
-        <h3 class="font-bold">For the best experience on iOS:</h3>
-        <ol class="list-decimal list-inside mt-2">
-            <li>Tap the share button at the bottom of the browser</li>
-            <li>Scroll down and select "Add to Home Screen"</li>
-            <li>Tap "Add" in the top right corner</li>
-            <li>Open the app from your home screen</li>
-        </ol>
-    </div>
-
     <script>
         let map, userMarker, destinationMarker, circle;
         let watchId, destination, alarmRadius;
         let isAlarmPlaying = false;
         let isAlarmActive = false;
-        let backgroundInterval;
-        let notificationCheckInterval;
-        let offlineLayer;
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
             alarmSound: 'default',
             volume: 0.5,
             enableNotifications: true,
-            updateInterval: 5,
-            enableOfflineMaps: false
+            locationPermission: 'whileInUse',
+            updateInterval: 5
         };
         
         // Initialize map
-        async function initMap() {
-            const tileLayerUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-            const tileLayerOptions = {
-                attribution: '© OpenTravel',
-                maxZoom: 18
-            };
-
+        function initMap() {
             map = L.map('map').setView([14.5995, 120.9842], 11); // Manila coordinates
-
-            if (settings.enableOfflineMaps) {
-                offlineLayer = L.tileLayer.offline(tileLayerUrl, tileLayerOptions);
-                await offlineLayer.addTo(map);
-            } else {
-                L.tileLayer(tileLayerUrl, tileLayerOptions).addTo(map);
-            }
-        }
-
-        // Check and request permissions
-        async function checkAndRequestPermissions() {
-            let geolocationPermission = false;
-            let notificationPermission = false;
-
-            // Check geolocation permission
-            if ('geolocation' in navigator) {
-                try {
-                    await new Promise((resolve, reject) => {
-                        navigator.geolocation.getCurrentPosition(resolve, reject);
-                    });
-                    geolocationPermission = true;
-                } catch (error) {
-                    console.error('Geolocation permission denied:', error);
-                }
-            }
-
-            // Check notification permission
-            if ('Notification' in window) {
-                if (Notification.permission === 'granted') {
-                    notificationPermission = true;
-                } else if (Notification.permission !== 'denied') {
-                    const permission = await Notification.requestPermission();
-                    notificationPermission = permission === 'granted';
-                }
-            }
-
-            return { geolocationPermission, notificationPermission };
-        }
-
-        // Set alarm
-        async function setAlarm() {
-            const { geolocationPermission, notificationPermission } = await checkAndRequestPermissions();
-
-            if (!geolocationPermission) {
-                showAlert('Geolocation permission is required to set the alarm. Please enable it in your browser settings.', 'error');
-                return;
-            }
-
-            if (!notificationPermission && settings.enableNotifications) {
-                showAlert('Notification permission is recommended for better experience. You can enable it in your browser settings.', 'info');
-            }
-
-            const destinationInput = document.getElementById('destination').value;
-            alarmRadius = parseInt(document.getElementById('radius').value);
-
-            if (!destinationInput) {
-                showAlert('Please enter a destination', 'error');
-                return;
-            }
-
-            if (isIOS()) {
-                showAlert('On iOS, keep the app open or add it to your home screen for the best experience. Notifications may not work when the app is in the background.', 'info');
-            }
-
-            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destinationInput)}, Philippines`)
-                .then(response => response.json())
-                .then(data => {
-                if (data.length > 0) {
-                        destination = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-                        
-                        if (destinationMarker) map.removeLayer(destinationMarker);
-                        if (circle) map.removeLayer(circle);
-                        
-                        destinationMarker = L.marker(destination, {
-                            icon: L.divIcon({
-                                className: 'bg-green-500 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center',
-                                html: '<span class="text-white text-xs">📍</span>',
-                                iconSize: [24, 24]
-                            })
-                        }).addTo(map);
-                        
-                        circle = L.circle(destination, { 
-                            radius: alarmRadius,
-                            color: 'green',
-                            fillColor: '#3ce03c',
-                            fillOpacity: 0.2
-                        }).addTo(map);
-                        
-                        map.fitBounds(circle.getBounds());
-
-                        if (watchId) {
-                            navigator.geolocation.clearWatch(watchId);
-                        }
-
-                        watchId = navigator.geolocation.watchPosition(updateLocation, 
-                            error => {
-                                console.error('Error getting location:', error);
-                                showAlert('Unable to get your location. Please check your settings and try again.', 'error');
-                            },
-                            {
-                                enableHighAccuracy: true,
-                                maximumAge: 0,
-                                timeout: 5000
-                            }
-                        );
-
-                        document.getElementById('status').textContent = 'Alarm set. Monitoring location...';
-                        document.getElementById('status').classList.remove('text-green-600', 'font-semibold');
-
-                        // Save alarm settings
-                        settings.destination = destinationInput;
-                        settings.radius = alarmRadius;
-                        sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
-                        isAlarmActive = true;
-
-                        // Start background updates and send initial notification
-                        startBackgroundUpdates();
-                        sendInitialNotification(destination);
-                    } else {
-                        showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error geocoding destination:', error);
-                    showAlert('Error finding destination. Please try again.', 'error');
-                });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenTravel'
+            }).addTo(map);
         }
 
         // Play alarm
@@ -369,9 +187,11 @@
             document.getElementById('setAlarm').classList.remove('hidden');
             showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
             
-            // Clear background interval
-            if (backgroundInterval) {
-                clearInterval(backgroundInterval);
+            // Stop background sync
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.sync.unregister('alarm-sync');
+                });
             }
         }
 
@@ -420,79 +240,153 @@
             return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
         }
 
+        // Set alarm
+        function setAlarm() {
+            const destinationInput = document.getElementById('destination').value;
+            alarmRadius = parseInt(document.getElementById('radius').value);
+
+            if (!destinationInput) {
+                showAlert('Please enter a destination', 'error');
+                return;
+            }
+
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destinationInput)}, Philippines`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        destination = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                        
+                        if (destinationMarker) map.removeLayer(destinationMarker);
+                        if (circle) map.removeLayer(circle);
+                        
+                        destinationMarker = L.marker(destination, {
+                            icon: L.divIcon({
+                                className: 'bg-green-500 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center',
+                                html: '<span class="text-white text-xs">📍</span>',
+                                iconSize: [24, 24]
+                            })
+                        }).addTo(map);
+                        
+                        circle = L.circle(destination, { 
+                            radius: alarmRadius,
+                            color: 'green',
+                            fillColor: '#3ce03c',
+                            fillOpacity: 0.2
+                        }).addTo(map);
+                        
+                        map.fitBounds(circle.getBounds());
+
+                        if (watchId) {
+                            navigator.geolocation.clearWatch(watchId);
+                        }
+
+                        watchId = navigator.geolocation.watchPosition(updateLocation, 
+                            error => {
+                                console.error('Error getting location:', error);
+                                showAlert('Unable to get your location. Please check your settings and try again.', 'error');
+                            },
+                            {
+                                enableHighAccuracy: true,
+                                maximumAge: 0,
+                                timeout: 5000
+                            }
+                        );
+
+                        document.getElementById('status').textContent = 'Alarm set. Monitoring location...';
+                        document.getElementById('status').classList.remove('text-green-600', 'font-semibold');
+
+                        // Save alarm settings
+                        settings.destination = destinationInput;
+                        settings.radius = alarmRadius;
+                        sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
+                        isAlarmActive = true;
+
+                        // Register for background sync
+                        if ('serviceWorker' in navigator) {
+                            navigator.serviceWorker.ready.then(registration => {
+                                registration.sync.register('alarm-sync');
+                            });
+                        }
+
+                        // Save alarm settings to cache for service worker
+                        if ('caches' in window) {
+                            caches.open('opentravel-cache-v1').then(cache => {
+                                cache.put('/alarm-settings', new Response(JSON.stringify({
+                                    destination: destination,
+                                    radius: alarmRadius,
+                                    enableNotifications: settings.enableNotifications,
+                                    updateInterval: settings.updateInterval
+                                })));
+                            });
+                        }
+
+                        // Start background updates and send initial notification
+                        startBackgroundUpdates();
+                        sendInitialNotification(destination);
+                    } else {
+                        showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error geocoding destination:', error);
+                    showAlert('Error finding destination. Please try again.', 'error');
+                });
+        }
+
         // Show notification
         function showNotification(title, body) {
             if ("Notification" in window && Notification.permission === "granted") {
-                if (isIOS()) {
-                    // iOS-specific handling
-                    if (window.navigator.standalone) {
-                        // App is in standalone mode (added to home screen)
-                        showAlert(`${title}: ${body}`, 'info');
-                    } else {
-                        // Fallback for Safari
-                        alert(`${title}: ${body}`);
-                    }
-                } else if (isAndroid()) {
-                    // Android-specific handling
-                    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                        navigator.serviceWorker.ready.then(registration => {
-                            registration.showNotification(title, {
-                                body: body,
-                                icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                                vibrate: [200, 100, 200]
-                            });
+                const now = new Date();
+                const options = {
+                    body: body,
+                    icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                    badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                    timestamp: now.getTime(),
+                    tag: 'opentravel-update',
+                    renotify: true
+                };
+
+                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                    // If service worker is active, use it to show notification with actions
+                    navigator.serviceWorker.ready.then(registration => {
+                        registration.showNotification(title, {
+                            ...options,
+                            actions: [
+                                { action: 'open', title: 'Open App' },
+                                { action: 'close', title: 'Close' }
+                            ]
                         });
-                    } else {
-                        new Notification(title, { body: body });
-                    }
+                    });
                 } else {
-                    // Desktop or other platforms
-                    new Notification(title, { body: body });
+                    // Fallback to regular Notification if service worker is not available
+                    return new Notification(title, options);
                 }
-            } else {
-                // Fallback if notifications are not supported or permitted
-                showAlert(`${title}: ${body}`, 'info');
             }
         }
 
         // Start background updates
         function startBackgroundUpdates() {
-            if (backgroundInterval) {
-                clearInterval(backgroundInterval);
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.active.postMessage({
+                        type: 'START_BACKGROUND_UPDATES',
+                        settings: {
+                            destination: destination,
+                            radius: alarmRadius,
+                            enableNotifications: settings.enableNotifications,
+                            updateInterval: settings.updateInterval
+                        },
+                        notificationOptions: {
+                            icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                            badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                            actions: [
+                                { action: 'open', title: 'Open App' },
+                                { action: 'close', title: 'Close' }
+                            ]
+                        }
+                    });
+                });
             }
-
-            let lastUpdateTime = Date.now();
-            const minInterval = 60000; // Minimum 1 minute between updates
-
-            backgroundInterval = setInterval(() => {
-                const now = Date.now();
-                if ((document.hidden || isIOS()) && now - lastUpdateTime >= minInterval) {
-                    checkLocationAndNotify();
-                    lastUpdateTime = now;
-                }
-            }, 10000); // Check every 10 seconds, but only update if enough time has passed
-
-            // Listen for visibility changes
-            document.addEventListener("visibilitychange", function() {
-                if (!document.hidden || isIOS()) {
-                    checkLocationAndNotify();
-                    lastUpdateTime = Date.now();
-                }
-            });
-        }
-
-        // Check location and send notification
-        function checkLocationAndNotify() {
-            navigator.geolocation.getCurrentPosition(
-                position => {
-                    const distance = calculateDistance(position.coords, {latitude: destination[0], longitude: destination[1]});
-                    const formattedDistance = formatDistance(distance);
-                    showNotification('OpenTravel Distance Update', `Current distance to destination: ${formattedDistance}`);
-                },
-                error => {
-                    console.error('Error getting location:', error);
-                }
-            );
         }
 
         // Send initial notification
@@ -519,8 +413,8 @@
             const Δλ = (point2.longitude - point1.longitude) * Math.PI/180;
 
             const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                        Math.cos(φ1) * Math.cos(φ2) *
-                        Math.sin(Δλ/2) * Math.sin(Δλ/2);
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
             return R * c; // Distance in meters
@@ -534,8 +428,8 @@
         }
 
         // Initialize the app
-        document.addEventListener('DOMContentLoaded', async () => {
-            await initMap();
+        document.addEventListener('DOMContentLoaded', () => {
+            initMap();
             document.getElementById('setAlarm').addEventListener('click', setAlarm);
             document.getElementById('stopAlarm').addEventListener('click', stopAlarm);
 
@@ -546,6 +440,7 @@
                 document.getElementById('volume').value = settings.volume;
                 document.getElementById('enableNotifications').checked = settings.enableNotifications;
                 document.getElementById('updateInterval').value = settings.updateInterval;
+                document.getElementById('locationPermission').value = settings.locationPermission;
             });
 
             document.getElementById('saveSettings').addEventListener('click', () => {
@@ -553,22 +448,29 @@
                 const newVolume = parseFloat(document.getElementById('volume').value);
                 const newEnableNotifications = document.getElementById('enableNotifications').checked;
                 const newUpdateInterval = parseInt(document.getElementById('updateInterval').value);
+                const newLocationPermission = document.getElementById('locationPermission').value;
                 
                 if (newAlarmSound !== settings.alarmSound || 
                     newVolume !== settings.volume || 
                     newEnableNotifications !== settings.enableNotifications ||
-                    newUpdateInterval !== settings.updateInterval) {
+                    newUpdateInterval !== settings.updateInterval ||
+                    newLocationPermission !== settings.locationPermission) {
                     
                     settings.alarmSound = newAlarmSound;
                     settings.volume = newVolume;
                     settings.enableNotifications = newEnableNotifications;
                     settings.updateInterval = newUpdateInterval;
+                    settings.locationPermission = newLocationPermission;
                     
                     sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
                     updateAlarmSound();
                     
                     if (newEnableNotifications && Notification.permission !== "granted") {
                         Notification.requestPermission();
+                    }
+                    
+                    if (newLocationPermission === 'always') {
+                        requestBackgroundPermission();
                     }
 
                     // Update background updates interval
@@ -589,50 +491,22 @@
                 settings = { 
                     alarmSound: 'default', 
                     volume: 0.5, 
-                    enableNotifications: true,
-                    updateInterval: 5,
-                    enableOfflineMaps: false
+                    enableNotifications: false,
+                    locationPermission: 'whileInUse',
+                    updateInterval: 5
                 };
                 document.getElementById('alarmSound').value = 'default';
                 document.getElementById('volume').value = '0.5';
-                document.getElementById('enableNotifications').checked = true;
+                document.getElementById('enableNotifications').checked = false;
                 document.getElementById('updateInterval').value = '5';
-                document.getElementById('enableOfflineMaps').checked = false;
+                document.getElementById('locationPermission').value = 'whileInUse';
                 document.getElementById('destination').value = '';
                 document.getElementById('radius').value = '1000';
                 updateAlarmSound();
                 showAlert('Session reset successfully!', 'success');
             });
 
-            document.getElementById('enableOfflineMaps').addEventListener('change', (e) => {
-                document.getElementById('offlineMapControls').style.display = e.target.checked ? 'block' : 'none';
-                settings.enableOfflineMaps = e.target.checked;
-                sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
-            });
-
-            document.getElementById('downloadOfflineMap').addEventListener('click', async () => {
-                const statusElement = document.getElementById('offlineMapStatus');
-                statusElement.textContent = 'Downloading offline map...';
-
-                try {
-                    const bounds = map.getBounds();
-                    const zoom = map.getZoom();
-                    await offlineLayer.saveTiles(bounds, zoom, zoom + 2, (progress) => {
-                        statusElement.textContent = `Downloading: ${Math.round(progress.percentage)}%`;
-                    });
-                    statusElement.textContent = 'Offline map downloaded successfully!';
-                    showAlert('Offline map downloaded successfully!', 'success');
-                } catch (error) {
-                    console.error('Error downloading offline map:', error);
-                    statusElement.textContent = 'Error downloading offline map. Please try again.';
-                    showAlert('Error downloading offline map. Please try again.', 'error');
-                }
-            });
-
             // Load saved settings
-            document.getElementById('enableOfflineMaps').checked = settings.enableOfflineMaps;
-            document.getElementById('offlineMapControls').style.display = settings.enableOfflineMaps ? 'block' : 'none';
-
             if (settings.destination) {
                 document.getElementById('destination').value = settings.destination;
             }
@@ -641,35 +515,27 @@
             }
             updateAlarmSound();
 
-            // Check initial permissions
-            const { geolocationPermission, notificationPermission } = await checkAndRequestPermissions();
-
-            if (!geolocationPermission) {
-                showAlert('Geolocation permission is required for this app to function properly. Please enable it in your browser settings.', 'error');
-            }
-
-            if (!notificationPermission && settings.enableNotifications) {
-                showAlert('Notifications are disabled. Enable them in your browser settings for a better experience.', 'info');
-            }
-
-            // Get initial user location if permission is granted
-            if (geolocationPermission) {
-                navigator.geolocation.getCurrentPosition(
-                    updateLocation,
-                    error => {
-                        console.error('Error getting initial location:', error);
-                        showAlert('Unable to get your initial location. Please check your settings and try again.', 'error');
-                    },
-                    {
-                        enableHighAccuracy: true,
-                        maximumAge: 0,
-                        timeout: 5000
-                    }
-                );
-            }
+            // Get initial user location
+            navigator.geolocation.getCurrentPosition(
+                updateLocation,
+                error => {
+                    console.error('Error getting initial location:', error);
+                    showAlert('Unable to get your initial location. Please check your settings and try again.', 'error');
+                },
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 5000
+                }
+            );
 
             // Initialize Lucide icons
             lucide.createIcons();
+
+            // Request notification permission if enabled
+            if (settings.enableNotifications && Notification.permission !== "granted") {
+                Notification.requestPermission();
+            }
 
             // Register service worker
             if ('serviceWorker' in navigator) {
@@ -688,20 +554,6 @@
                     updateLocation(event.data.position);
                 }
             });
-
-            // Hide loading screen and show app
-            document.getElementById('loadingScreen').style.display = 'none';
-            document.getElementById('app').classList.remove('hidden');
-
-            // Show iOS instructions if applicable
-            if (isIOS()) {
-                document.getElementById('iosInstructions').classList.remove('hidden');
-            }
-
-            // Start notification polling for iOS
-            if (isIOS()) {
-                startNotificationPolling();
-            }
         });
 
         function updateAlarmSound() {
@@ -780,40 +632,47 @@
             document.getElementById('alertIcon').classList.remove('bg-green-100', 'bg-red-100', 'bg-blue-100');
         }
 
-        function isIOS() {
-            return /iPhone|iPad|iPod/i.test(navigator.userAgent);
-        }
-
-        function isAndroid() {
-            return /Android/i.test(navigator.userAgent);
-        }
-
-        function startNotificationPolling() {
-            if (notificationCheckInterval) {
-                clearInterval(notificationCheckInterval);
-            }
-            
-            notificationCheckInterval = setInterval(() => {
-                checkForNotifications();
-            }, 60000); // Check every minute
-        }
-
-        async function checkForNotifications() {
-            try {
-                const response = await fetch('/api/check-notifications');
-                const data = await response.json();
-                
-                if (data.hasNotification) {
-                    showNotification(data.title, data.message);
-                }
-            } catch (error) {
-                console.error('Error checking for notifications:', error);
+        function requestBackgroundPermission() {
+            if ('permissions' in navigator) {
+                navigator.permissions.query({name:'geolocation'}).then(function(result) {
+                    if (result.state === 'granted') {
+                        showAlert('Background location permission granted', 'success');
+                    } else if (result.state === 'prompt') {
+                        showAlert('Please allow background location access when prompted', 'info');
+                    } else if (result.state === 'denied') {
+                        showAlert('Background location permission denied. Please enable it in your browser settings.', 'error');
+                    }
+                });
+            } else {
+                showAlert('Background location permission is not supported in this browser', 'error');
             }
         }
 
-        // Request notification permission
-        if ("Notification" in window) {
-            Notification.requestPermission();
+        let deferredPrompt;
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            showInstallPrompt();
+        });
+
+        function showInstallPrompt() {
+            const installButton = document.createElement('button');
+            installButton.textContent = 'Install OpenTravel';
+            installButton.classList.add('fixed', 'bottom-4', 'right-4', 'bg-green-500', 'text-white', 'p-2', 'rounded-full', 'shadow-lg');
+            installButton.addEventListener('click', () => {
+                deferredPrompt.prompt();
+                deferredProm
+pt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('User accepted the install prompt');
+                    } else {
+                        console.log('User dismissed the install prompt');
+                    }
+                    deferredPrompt = null;
+                });
+            });
+            document.body.appendChild(installButton);
         }
     </script>
 </body>
