@@ -61,40 +61,79 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-async function checkAlarmCondition() {
-  const cache = await caches.open(CACHE_NAME);
-  const alarmSettings = await cache.match('/alarm-settings');
-  if (alarmSettings) {
-    const settings = await alarmSettings.json();
-    const currentPosition = await getCurrentPosition();
-    const distance = calculateDistance(currentPosition, settings.destination);
-    
-    if (distance <= settings.radius) {
-      self.registration.showNotification('OpenTravel Alarm', {
-        body: 'You have reached your destination!',
-        icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-        vibrate: [200, 100, 200]
+self.addEventListener('backgroundfetchsuccess', (event) => {
+  const bgFetch = event.registration;
+  event.waitUntil(async function() {
+    // Get the cache
+    const cache = await caches.open(CACHE_NAME);
+    const alarmSettings = await cache.match('/alarm-settings');
+    if (alarmSettings) {
+      const settings = await alarmSettings.json();
+      const records = await bgFetch.matchAll();
+      const promises = records.map(async (record) => {
+        const response = await record.responseReady;
+        const position = await response.json();
+        await checkAlarmCondition(position, settings);
       });
-      
-      // Play alarm sound
-      const clients = await self.clients.matchAll();
-      clients.forEach(client => {
-        client.postMessage({
-          type: 'PLAY_ALARM'
-        });
+      await Promise.all(promises);
+    }
+  }());
+});
+
+async function checkAlarmCondition(position, settings) {
+  const distance = calculateDistance(position, settings.destination);
+  
+  if (distance <= settings.radius) {
+    self.registration.showNotification('OpenTravel Alarm', {
+      body: 'You have reached your destination!',
+      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+      vibrate: [200, 100, 200]
+    });
+    
+    // Notify the main thread to play alarm sound
+    const clients = await self.clients.matchAll();
+    clients.forEach(client => {
+      client.postMessage({
+        type: 'PLAY_ALARM'
+      });
+    });
+  } else {
+    // Send a location update to the main thread
+    const clients = await self.clients.matchAll();
+    clients.forEach(client => {
+      client.postMessage({
+        type: 'LOCATION_UPDATE',
+        position: position
+      });
+    });
+
+    // Show a notification with the current distance
+    if (settings.enableNotifications) {
+      self.registration.showNotification('OpenTravel Distance Update', {
+        body: `Current distance: ${Math.round(distance)} meters`,
+        icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        tag: 'distance-update', // This ensures we don't spam notifications
+        renotify: true // This allows the notification to update instead of creating a new one
       });
     }
   }
-}
 
-function getCurrentPosition() {
-  return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      maximumAge: 0,
-      timeout: 5000
-    });
-  });
+  // Schedule the next update
+  setTimeout(() => {
+    self.registration.backgroundFetch.fetch(
+      'location-update',
+      ['/update-location'],
+      {
+        title: 'Location Update',
+        icons: [{
+          sizes: '192x192',
+          src: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+          type: 'image/png',
+        }],
+        downloadTotal: 0,
+      }
+    );
+  }, settings.updateInterval * 60 * 1000); // Convert minutes to milliseconds
 }
 
 function calculateDistance(position1, position2) {
@@ -104,10 +143,10 @@ function calculateDistance(position1, position2) {
   const Δφ = (position2[0] - position1.coords.latitude) * Math.PI/180;
   const Δλ = (position2[1] - position1.coords.longitude) * Math.PI/180;
 
-  const a = Math.sin(Δφ/2)  Math.sin(Δφ/2) +
-            Math.cos(φ1)  Math.cos(φ2) 
-            Math.sin(Δλ/2)  Math.sin(Δλ/2);
-  const c = 2  Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
-  return R  c; // Distance in meters
+  return R * c; // Distance in meters
 }
