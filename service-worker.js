@@ -25,15 +25,9 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-});
-
 self.addEventListener('sync', (event) => {
-  if (event.tag === 'alarm-sync') {
-    event.waitUntil(checkAlarmCondition());
+  if (event.tag === 'location-update') {
+    event.waitUntil(performBackgroundSync());
   }
 });
 
@@ -42,11 +36,18 @@ self.addEventListener('push', (event) => {
   const options = {
     body: data.body,
     icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+    badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
     vibrate: [100, 50, 100],
     data: {
       dateOfArrival: Date.now(),
-      primaryKey: 'alarm'
-    }
+      primaryKey: 'location-update'
+    },
+    actions: [
+      { action: 'open', title: 'Open App' },
+      { action: 'close', title: 'Close' }
+    ],
+    tag: 'location-update',
+    renotify: true
   };
 
   event.waitUntil(
@@ -58,108 +59,60 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   if (event.action === 'open') {
     event.waitUntil(
-      clients.matchAll({ type: 'window' }).then(clientList => {
-        for (const client of clientList) {
-          if (client.url === '/' && 'focus' in client) {
-            return client.focus();
-          }
-        }
-        if (clients.openWindow) {
-          return clients.openWindow('/');
-        }
-      })
-    );
-  } else {
-    event.waitUntil(
       clients.openWindow('/')
     );
   }
 });
 
-self.addEventListener('backgroundfetchsuccess', (event) => {
-  const bgFetch = event.registration;
-  event.waitUntil(async function() {
-    // Get the cache
-    const cache = await caches.open(CACHE_NAME);
-    const alarmSettings = await cache.match('/alarm-settings');
-    if (alarmSettings) {
-      const settings = await alarmSettings.json();
-      const records = await bgFetch.matchAll();
-      const promises = records.map(async (record) => {
-        const response = await record.responseReady;
-        const position = await response.json();
-        await checkAlarmCondition(position, settings);
-      });
-      await Promise.all(promises);
-    }
-  }());
-});
-
-async function checkAlarmCondition(position, settings) {
-  const distance = calculateDistance(position, settings.destination);
-  
-  if (distance <= settings.radius) {
-    self.registration.showNotification('OpenTravel Alarm', {
-      body: 'You have reached your destination!',
-      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-      vibrate: [200, 100, 200]
-    });
+async function performBackgroundSync() {
+  const cache = await caches.open(CACHE_NAME);
+  const alarmSettings = await cache.match('/alarm-settings');
+  if (alarmSettings) {
+    const settings = await alarmSettings.json();
+    const position = await getCurrentPosition();
+    const distance = calculateDistance(position, settings.destination);
     
-    // Notify the main thread to play alarm sound
-    const clients = await self.clients.matchAll();
-    clients.forEach(client => {
-      client.postMessage({
-        type: 'PLAY_ALARM'
-      });
-    });
-  } else {
-    // Send a location update to the main thread
-    const clients = await self.clients.matchAll();
-    clients.forEach(client => {
-      client.postMessage({
-        type: 'LOCATION_UPDATE',
-        position: position
-      });
-    });
-
-    // Show a notification with the current distance
-    if (settings.enableNotifications) {
-      self.registration.showNotification('OpenTravel Update', {
-        badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-        body: `${formatDistance(distance)} from destination\nETA: ${calculateETA(distance)}`,
+    if (distance <= settings.radius) {
+      self.registration.showNotification('OpenTravel Alarm', {
+        body: 'You have reached your destination!',
         icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-        tag: 'distance-update',
+        badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        vibrate: [200, 100, 200],
+        requireInteraction: true,
+        actions: [
+          { action: 'open', title: 'Open App' },
+          { action: 'close', title: 'Close' }
+        ]
+      });
+    } else {
+      const eta = calculateETA(distance);
+      self.registration.showNotification('OpenTravel Update', {
+        body: `${formatDistance(distance)} from destination\nETA: ${eta}`,
+        icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        tag: 'location-update',
         renotify: true,
         actions: [
-          { action: 'open', title: 'View Map' }
+          { action: 'open', title: 'Open App' },
+          { action: 'close', title: 'Close' }
         ],
         data: {
           progress: calculateProgress(distance, settings.radius),
           timestamp: new Date().getTime()
-        },
-        timestamp: new Date().getTime(),
-        requireInteraction: true,
-        silent: true
+        }
       });
     }
   }
+}
 
-  // Schedule the next update
-  setTimeout(() => {
-    self.registration.backgroundFetch.fetch(
-      'location-update',
-      ['/update-location'],
-      {
-        title: 'Location Update',
-        icons: [{
-          sizes: '192x192',
-          src: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-          type: 'image/png',
-        }],
-        downloadTotal: 0,
-      }
-    );
-  }, settings.updateInterval * 60 * 1000); // Convert minutes to milliseconds
+function getCurrentPosition() {
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 5000
+    });
+  });
 }
 
 function calculateDistance(position1, position2) {
