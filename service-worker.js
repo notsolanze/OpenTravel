@@ -25,10 +25,8 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
 });
 
 self.addEventListener('sync', (event) => {
@@ -36,22 +34,6 @@ self.addEventListener('sync', (event) => {
     event.waitUntil(checkAlarmCondition());
   }
 });
-
-self.addEventListener('periodicsync', (event) => {
-  if (event.tag === 'location-update') {
-    event.waitUntil(performBackgroundUpdate());
-  }
-});
-
-async function performBackgroundUpdate() {
-  const cache = await caches.open(CACHE_NAME);
-  const alarmSettings = await cache.match('/alarm-settings');
-  if (alarmSettings) {
-    const settings = await alarmSettings.json();
-    const position = await getCurrentPosition();
-    await checkAlarmCondition(position, settings);
-  }
-}
 
 self.addEventListener('push', (event) => {
   const data = event.data.json();
@@ -86,35 +68,63 @@ self.addEventListener('notificationclick', (event) => {
   }
 });
 
-async function checkAlarmCondition(position, settings) {
-  const distance = calculateDistance(position, settings.destination);
-  
-  if (distance <= settings.radius) {
-    self.registration.showNotification('OpenTravel Alarm', {
-      body: 'You have reached your destination!',
-      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-      badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-      vibrate: [200, 100, 200],
-      tag: 'opentravel-alarm',
-      renotify: true
-    });
-  } else {
-    const eta = calculateETA(distance);
-    const progress = calculateProgress(distance, settings.radius);
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'START_BACKGROUND_UPDATES') {
+    startBackgroundUpdates(event.data.settings);
+  }
+});
+
+function startBackgroundUpdates(settings) {
+  setInterval(() => {
+    checkAlarmCondition(settings);
+  }, settings.updateInterval * 60 * 1000); // Convert minutes to milliseconds
+}
+
+async function checkAlarmCondition(settings) {
+  const cache = await caches.open(CACHE_NAME);
+  const alarmSettings = await cache.match('/alarm-settings');
+  if (alarmSettings) {
+    const savedSettings = await alarmSettings.json();
+    const position = await getCurrentPosition();
+    const distance = calculateDistance(position, savedSettings.destination);
     
-    self.registration.showNotification('OpenTravel Update', {
-      body: `${formatDistance(distance)} from destination\nETA: ${eta}`,
-      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-      badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-      tag: 'opentravel-update',
-      renotify: true,
-      actions: [
-        { action: 'open', title: 'View Map' }
-      ],
-      data: {
-        progress: progress,
-        timestamp: new Date().getTime()
-      }
+    if (distance <= savedSettings.radius) {
+      self.registration.showNotification('OpenTravel Alarm', {
+        body: 'You have reached your destination!',
+        icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        vibrate: [200, 100, 200],
+        tag: 'opentravel-alarm',
+        renotify: true
+      });
+    } else {
+      const eta = calculateETA(distance);
+      const progress = calculateProgress(distance, savedSettings.radius);
+      
+      self.registration.showNotification('OpenTravel Update', {
+        body: `${formatDistance(distance)} from destination\nETA: ${eta}`,
+        icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        tag: 'opentravel-update',
+        renotify: true,
+        actions: [
+          { action: 'open', title: 'View Map' }
+        ],
+        data: {
+          progress: progress,
+          timestamp: new Date().getTime()
+        }
+      });
+    }
+
+    // Send update to the main thread
+    self.clients.matchAll().then(clients => {
+      clients.forEach(client => {
+        client.postMessage({
+          type: 'LOCATION_UPDATE',
+          position: position
+        });
+      });
     });
   }
 }
