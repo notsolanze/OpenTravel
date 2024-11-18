@@ -12,6 +12,9 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#10B981">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/128/10473/10473293.png">
     <style>
         body {
             font-family: 'Space Grotesk', sans-serif;
@@ -92,7 +95,7 @@
             </div>
             <div class="mb-4">
                 <label class="flex items-center">
-                    <input type="checkbox" id="enableNotifications" class="form-checkbox h-5 w-5 text-green-600" checked>
+                    <input type="checkbox" id="enableNotifications" class="form-checkbox h-5 w-5 text-green-600">
                     <span class="ml-2 text-sm text-gray-700">Enable Notifications</span>
                 </label>
             </div>
@@ -128,6 +131,7 @@
         let watchId, destination, alarmRadius;
         let isAlarmPlaying = false;
         let isAlarmActive = false;
+        let backgroundInterval;
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
@@ -183,6 +187,11 @@
                 navigator.serviceWorker.ready.then(registration => {
                     registration.sync.unregister('alarm-sync');
                 });
+            }
+
+            // Clear background interval
+            if (backgroundInterval) {
+                clearInterval(backgroundInterval);
             }
         }
 
@@ -293,21 +302,11 @@
                         isAlarmActive = true;
 
                         // Register for background sync
-                        if ('serviceWorker' in navigator) {
-                            navigator.serviceWorker.ready.then(registration => {
-                                registration.sync.register('alarm-sync');
-                            });
-                        }
-
-                        // Save alarm settings to cache for service worker
-                        if ('caches' in window) {
-                            caches.open('opentravel-cache-v1').then(cache => {
-                                cache.put('/alarm-settings', new Response(JSON.stringify({
-                                    destination: destination,
-                                    radius: alarmRadius,
-                                    enableNotifications: settings.enableNotifications,
-                                    updateInterval: settings.updateInterval
-                                })));
+                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                            navigator.serviceWorker.ready.then(function(reg) {
+                                return reg.sync.register('alarm-sync');
+                            }).catch(function(err) {
+                                console.log('Background sync failed:', err);
                             });
                         }
 
@@ -337,28 +336,29 @@
                     });
                 }
             }
+
+            // For iOS Safari when in standalone mode (PWA)
+            if (window.navigator.standalone) {
+                // Use local notification
+                if ("Notification" in window) {
+                    new Notification(title, { body: body });
+                }
+            }
         }
 
         function sendNotification(title, body) {
-            const now = new Date();
             const options = {
                 body: body,
                 icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
                 badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                timestamp: now.getTime(),
+                vibrate: [200, 100, 200],
                 tag: 'opentravel-update',
                 renotify: true
             };
 
             if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
                 navigator.serviceWorker.ready.then(registration => {
-                    registration.showNotification(title, {
-                        ...options,
-                        actions: [
-                            { action: 'open', title: 'Open App' },
-                            { action: 'close', title: 'Close' }
-                        ]
-                    });
+                    registration.showNotification(title, options);
                 });
             } else {
                 new Notification(title, options);
@@ -367,27 +367,36 @@
 
         // Start background updates
         function startBackgroundUpdates() {
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.ready.then(registration => {
-                    registration.active.postMessage({
-                        type: 'START_BACKGROUND_UPDATES',
-                        settings: {
-                            destination: destination,
-                            radius: alarmRadius,
-                            enableNotifications: settings.enableNotifications,
-                            updateInterval: settings.updateInterval
-                        },
-                        notificationOptions: {
-                            icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                            badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                            actions: [
-                                { action: 'open', title: 'Open App' },
-                                { action: 'close', title: 'Close' }
-                            ]
-                        }
-                    });
-                });
+            if (backgroundInterval) {
+                clearInterval(backgroundInterval);
             }
+
+            backgroundInterval = setInterval(() => {
+                if (document.hidden) {
+                    checkLocationAndNotify();
+                }
+            }, settings.updateInterval * 60 * 1000); // Convert minutes to milliseconds
+
+            // Listen for visibility changes
+            document.addEventListener("visibilitychange", function() {
+                if (document.hidden) {
+                    checkLocationAndNotify();
+                }
+            });
+        }
+
+        // Check location and send notification
+        function checkLocationAndNotify() {
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    const distance = calculateDistance(position.coords, {latitude: destination[0], longitude: destination[1]});
+                    const formattedDistance = formatDistance(distance);
+                    showNotification('OpenTravel Distance Update', `Current distance to destination: ${formattedDistance}`);
+                },
+                error => {
+                    console.error('Error getting location:', error);
+                }
+            );
         }
 
         // Send initial notification
@@ -414,8 +423,8 @@
             const Δλ = (point2.longitude - point1.longitude) * Math.PI/180;
 
             const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                      Math.cos(φ1) * Math.cos(φ2) *
-                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
+                        Math.cos(φ1) * Math.cos(φ2) *
+                        Math.sin(Δλ/2) * Math.sin(Δλ/2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
             return R * c; // Distance in meters
@@ -524,7 +533,7 @@
             lucide.createIcons();
 
             // Request notification permission if enabled
-            if (settings.enableNotifications && Notification.permission !== "granted") {
+            if (settings.enableNotifications) {
                 Notification.requestPermission();
             }
 
