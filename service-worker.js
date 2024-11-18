@@ -14,19 +14,50 @@ const urlsToCache = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(urlsToCache))
+      .then((cache) => {
+        console.log('Opened cache');
+        return cache.addAll(urlsToCache);
+      })
+      .catch((error) => {
+        console.error('Cache opening failed:', error);
+      })
   );
 });
 
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request)
-      .then((response) => response || fetch(event.request))
+      .then((response) => {
+        if (response) {
+          return response;
+        }
+        return fetch(event.request).catch(() => {
+          // If both cache and network fail, you might want to show an offline page
+          return new Response("You are offline and the resource is not cached.");
+        });
+      })
   );
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  const cacheWhitelist = [CACHE_NAME];
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheWhitelist.indexOf(cacheName) === -1) {
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
+  );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('sync', (event) => {
@@ -68,64 +99,40 @@ self.addEventListener('notificationclick', (event) => {
   }
 });
 
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'START_BACKGROUND_UPDATES') {
-    startBackgroundUpdates(event.data.settings);
-  }
-});
-
-function startBackgroundUpdates(settings) {
-  setInterval(() => {
-    checkAlarmCondition(settings);
-  }, settings.updateInterval * 60 * 1000); // Convert minutes to milliseconds
-}
-
-async function checkAlarmCondition(settings) {
-  const cache = await caches.open(CACHE_NAME);
-  const alarmSettings = await cache.match('/alarm-settings');
-  if (alarmSettings) {
-    const savedSettings = await alarmSettings.json();
-    const position = await getCurrentPosition();
-    const distance = calculateDistance(position, savedSettings.destination);
-    
-    if (distance <= savedSettings.radius) {
-      self.registration.showNotification('OpenTravel Alarm', {
-        body: 'You have reached your destination!',
-        icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-        badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-        vibrate: [200, 100, 200],
-        tag: 'opentravel-alarm',
-        renotify: true
-      });
-    } else {
-      const eta = calculateETA(distance);
-      const progress = calculateProgress(distance, savedSettings.radius);
+async function checkAlarmCondition() {
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    const alarmSettingsResponse = await cache.match('/alarm-settings');
+    if (alarmSettingsResponse) {
+      const alarmSettings = await alarmSettingsResponse.json();
+      const position = await getCurrentPosition();
+      const distance = calculateDistance(position.coords, alarmSettings.destination);
       
-      self.registration.showNotification('OpenTravel Update', {
-        body: `${formatDistance(distance)} from destination\nETA: ${eta}`,
-        icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-        badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-        tag: 'opentravel-update',
-        renotify: true,
-        actions: [
-          { action: 'open', title: 'View Map' }
-        ],
-        data: {
-          progress: progress,
-          timestamp: new Date().getTime()
-        }
-      });
-    }
-
-    // Send update to the main thread
-    self.clients.matchAll().then(clients => {
-      clients.forEach(client => {
-        client.postMessage({
-          type: 'LOCATION_UPDATE',
-          position: position
+      if (distance <= alarmSettings.radius) {
+        await self.registration.showNotification('OpenTravel Alarm', {
+          body: 'You have reached your destination!',
+          icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+          badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+          vibrate: [200, 100, 200],
+          tag: 'opentravel-alarm',
+          renotify: true
         });
-      });
-    });
+      } else {
+        const eta = calculateETA(distance);
+        await self.registration.showNotification('OpenTravel Update', {
+          body: `${formatDistance(distance)} from destination. ETA: ${eta}`,
+          icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+          badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+          tag: 'opentravel-update',
+          renotify: true,
+          actions: [
+            { action: 'open', title: 'View Map' }
+          ]
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error in checkAlarmCondition:', error);
   }
 }
 
@@ -141,10 +148,10 @@ function getCurrentPosition() {
 
 function calculateDistance(position1, position2) {
   const R = 6371e3; // Earth's radius in meters
-  const φ1 = position1.coords.latitude * Math.PI/180;
+  const φ1 = position1.latitude * Math.PI/180;
   const φ2 = position2[0] * Math.PI/180;
-  const Δφ = (position2[0] - position1.coords.latitude) * Math.PI/180;
-  const Δλ = (position2[1] - position1.coords.longitude) * Math.PI/180;
+  const Δφ = (position2[0] - position1.latitude) * Math.PI/180;
+  const Δλ = (position2[1] - position1.longitude) * Math.PI/180;
 
   const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
             Math.cos(φ1) * Math.cos(φ2) *
@@ -166,9 +173,4 @@ function calculateETA(distance) {
   const now = new Date();
   now.setMinutes(now.getMinutes() + timeInMinutes);
   return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-function calculateProgress(currentDistance, targetRadius) {
-  // Convert to a percentage where 100% is at the destination
-  return Math.min(100, Math.max(0, 100 - (currentDistance / targetRadius * 100)));
 }
