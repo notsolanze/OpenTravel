@@ -25,33 +25,11 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-});
-
 self.addEventListener('sync', (event) => {
-  if (event.tag === 'alarm-sync') {
-    event.waitUntil(checkAlarmCondition());
-  }
-});
-
-self.addEventListener('periodicsync', (event) => {
   if (event.tag === 'location-update') {
-    event.waitUntil(performBackgroundUpdate());
+    event.waitUntil(performBackgroundSync());
   }
 });
-
-async function performBackgroundUpdate() {
-  const cache = await caches.open(CACHE_NAME);
-  const alarmSettings = await cache.match('/alarm-settings');
-  if (alarmSettings) {
-    const settings = await alarmSettings.json();
-    const position = await getCurrentPosition();
-    await checkAlarmCondition(position, settings);
-  }
-}
 
 self.addEventListener('push', (event) => {
   const data = event.data.json();
@@ -62,13 +40,13 @@ self.addEventListener('push', (event) => {
     vibrate: [100, 50, 100],
     data: {
       dateOfArrival: Date.now(),
-      primaryKey: 'alarm'
+      primaryKey: 'location-update'
     },
     actions: [
       { action: 'open', title: 'Open App' },
       { action: 'close', title: 'Close' }
     ],
-    tag: 'opentravel-update',
+    tag: 'location-update',
     renotify: true
   };
 
@@ -86,36 +64,44 @@ self.addEventListener('notificationclick', (event) => {
   }
 });
 
-async function checkAlarmCondition(position, settings) {
-  const distance = calculateDistance(position, settings.destination);
-  
-  if (distance <= settings.radius) {
-    self.registration.showNotification('OpenTravel Alarm', {
-      body: 'You have reached your destination!',
-      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-      badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-      vibrate: [200, 100, 200],
-      tag: 'opentravel-alarm',
-      renotify: true
-    });
-  } else {
-    const eta = calculateETA(distance);
-    const progress = calculateProgress(distance, settings.radius);
+async function performBackgroundSync() {
+  const cache = await caches.open(CACHE_NAME);
+  const alarmSettings = await cache.match('/alarm-settings');
+  if (alarmSettings) {
+    const settings = await alarmSettings.json();
+    const position = await getCurrentPosition();
+    const distance = calculateDistance(position, settings.destination);
     
-    self.registration.showNotification('OpenTravel Update', {
-      body: `${formatDistance(distance)} from destination\nETA: ${eta}`,
-      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-      badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-      tag: 'opentravel-update',
-      renotify: true,
-      actions: [
-        { action: 'open', title: 'View Map' }
-      ],
-      data: {
-        progress: progress,
-        timestamp: new Date().getTime()
-      }
-    });
+    if (distance <= settings.radius) {
+      self.registration.showNotification('OpenTravel Alarm', {
+        body: 'You have reached your destination!',
+        icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        vibrate: [200, 100, 200],
+        requireInteraction: true,
+        actions: [
+          { action: 'open', title: 'Open App' },
+          { action: 'close', title: 'Close' }
+        ]
+      });
+    } else {
+      const eta = calculateETA(distance);
+      self.registration.showNotification('OpenTravel Update', {
+        body: `${formatDistance(distance)} from destination\nETA: ${eta}`,
+        icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        tag: 'location-update',
+        renotify: true,
+        actions: [
+          { action: 'open', title: 'Open App' },
+          { action: 'close', title: 'Close' }
+        ],
+        data: {
+          progress: calculateProgress(distance, settings.radius),
+          timestamp: new Date().getTime()
+        }
+      });
+    }
   }
 }
 
