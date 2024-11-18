@@ -144,6 +144,7 @@
         let isAlarmPlaying = false;
         let isAlarmActive = false;
         let backgroundInterval;
+        let serviceWorkerRegistration = null;
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
@@ -312,30 +313,21 @@
                         sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
                         isAlarmActive = true;
 
-                        // Register for background sync
-                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
-                            navigator.serviceWorker.ready.then(function(reg) {
-                                return reg.sync.register('alarm-sync');
-                            }).catch(function(err) {
-                                console.log('Background sync failed:', err);
-                            });
-                        }
-
                         // Start journey in service worker
-                        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                            navigator.serviceWorker.ready.then(registration => {
-                                console.log('Sending START_JOURNEY message to service worker');
-                                registration.active.postMessage({
-                                    type: 'START_JOURNEY',
-                                    settings: {
-                                        destination: destination,
-                                        radius: alarmRadius,
-                                        updateInterval: settings.updateInterval
-                                    }
-                                });
+                        if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+                            console.log('Sending START_JOURNEY message to service worker');
+                            serviceWorkerRegistration.active.postMessage({
+                                type: 'START_JOURNEY',
+                                settings: {
+                                    destination: destination,
+                                    radius: alarmRadius,
+                                    updateInterval: settings.updateInterval
+                                }
                             });
                         } else {
-                            console.error('Service worker not available or not controlling the page');
+                            console.error('Service worker not ready. Retrying in 1 second...');
+                            setTimeout(setAlarm, 1000);
+                            return;
                         }
 
                         showAlert('Alarm set successfully!', 'success');
@@ -476,10 +468,28 @@
                 navigator.serviceWorker.register('/service-worker.js')
                     .then(registration => {
                         console.log('Service Worker registered with scope:', registration.scope);
+                        serviceWorkerRegistration = registration;
+                        
+                        // Ensure the service worker is updated to the latest version
+                        registration.update();
+
+                        // Wait for the service worker to become active
+                        if (registration.installing) {
+                            registration.installing.addEventListener('statechange', function() {
+                                if (this.state === 'activated') {
+                                    console.log('Service worker activated');
+                                }
+                            });
+                        }
                     })
                     .catch(error => {
                         console.error('Service Worker registration failed:', error);
                     });
+
+                // Listen for service worker state changes
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    console.log('Service worker controller changed');
+                });
             }
 
             // Listen for messages from the service worker
