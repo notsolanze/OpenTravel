@@ -105,9 +105,11 @@ async function checkAlarmCondition() {
     const alarmSettingsResponse = await cache.match('/alarm-settings');
     if (alarmSettingsResponse) {
       const alarmSettings = await alarmSettingsResponse.json();
+      await updateLocationNotification(alarmSettings.destination);
+
       const position = await getCurrentPosition();
       const distance = calculateDistance(position.coords, alarmSettings.destination);
-      
+
       if (distance <= alarmSettings.radius) {
         await self.registration.showNotification('OpenTravel Alarm', {
           body: 'You have reached your destination!',
@@ -116,18 +118,6 @@ async function checkAlarmCondition() {
           vibrate: [200, 100, 200],
           tag: 'opentravel-alarm',
           renotify: true
-        });
-      } else {
-        const eta = calculateETA(distance);
-        await self.registration.showNotification('OpenTravel Update', {
-          body: `${formatDistance(distance)} from destination. ETA: ${eta}`,
-          icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-          badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-          tag: 'opentravel-update',
-          renotify: true,
-          actions: [
-            { action: 'open', title: 'View Map' }
-          ]
         });
       }
     }
@@ -173,4 +163,54 @@ function calculateETA(distance) {
   const now = new Date();
   now.setMinutes(now.getMinutes() + timeInMinutes);
   return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+let notificationInterval;
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'START_LOCATION_UPDATES') {
+    startLocationUpdates(event.data.destination);
+  } else if (event.data && event.data.type === 'STOP_LOCATION_UPDATES') {
+    stopLocationUpdates();
+  } else if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+function startLocationUpdates(destination) {
+  if (notificationInterval) {
+    clearInterval(notificationInterval);
+  }
+
+  notificationInterval = setInterval(() => {
+    updateLocationNotification(destination);
+  }, 60000); // Update every minute
+
+  // Immediately show the first notification
+  updateLocationNotification(destination);
+}
+
+function stopLocationUpdates() {
+  if (notificationInterval) {
+    clearInterval(notificationInterval);
+  }
+}
+
+async function updateLocationNotification(destination) {
+  try {
+    const position = await getCurrentPosition();
+    const distance = calculateDistance(position.coords, destination);
+    const formattedDistance = formatDistance(distance);
+
+    await self.registration.showNotification('OpenTravel Update', {
+      body: `Current distance to destination: ${formattedDistance}`,
+      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+      badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+      tag: 'opentravel-location-update',
+      renotify: true,
+      silent: true // This makes the notification update silently
+    });
+  } catch (error) {
+    console.error('Error updating location notification:', error);
+  }
 }
