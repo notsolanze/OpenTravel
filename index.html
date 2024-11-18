@@ -194,16 +194,9 @@
                 });
             }
 
-            // Stop background fetch
-            if ('serviceWorker' in navigator && 'BackgroundFetchManager' in self) {
-                navigator.serviceWorker.ready.then(registration => {
-                    registration.backgroundFetch.get('location-update')
-                        .then(backgroundFetch => {
-                            if (backgroundFetch) {
-                                backgroundFetch.abort();
-                            }
-                        });
-                });
+            // Stop periodic sync
+            if ('serviceWorker' in navigator && 'periodicSync' in registration) {
+                registration.periodicSync.unregister('location-update');
             }
         }
 
@@ -320,6 +313,13 @@
                             });
                         }
 
+                        // Register for periodic sync
+                        if ('serviceWorker' in navigator && 'periodicSync' in registration) {
+                            registration.periodicSync.register('location-update', {
+                                minInterval: settings.updateInterval * 60 * 1000 // Convert minutes to milliseconds
+                            });
+                        }
+
                         // Save alarm settings to cache for service worker
                         if ('caches' in window) {
                             caches.open('opentravel-cache-v1').then(cache => {
@@ -334,9 +334,6 @@
 
                         // Request wake lock
                         requestWakeLock();
-
-                        // Start background fetch for periodic updates
-                        startBackgroundFetch();
                     } else {
                         showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
                     }
@@ -356,18 +353,13 @@
                     icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
                     badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
                     timestamp: now.getTime(),
-                    tag: 'distance-update',
+                    tag: 'opentravel-update',
                     renotify: true,
-                    requireInteraction: true,
-                    silent: true,
-                    data: {
-                        timestamp: now.getTime()
-                    }
+                    actions: [
+                        { action: 'open', title: 'Open App' },
+                        { action: 'close', title: 'Close' }
+                    ]
                 };
-
-                if (title === 'OpenTravel Distance Update') {
-                    options.actions = [{ action: 'open', title: 'View Map' }];
-                }
 
                 return new Notification(title, options);
             }
@@ -384,32 +376,6 @@
                 }
             } else {
                 console.log('Wake Lock API not supported');
-            }
-        }
-
-        // Start background fetch
-        function startBackgroundFetch() {
-            if ('serviceWorker' in navigator && 'BackgroundFetchManager' in self) {
-                navigator.serviceWorker.ready.then(async (registration) => {
-                    try {
-                        const fetch = await registration.backgroundFetch.fetch(
-                            'location-update',
-                            ['/update-location'],
-                            {
-                                title: 'Location Update',
-                                icons: [{
-                                    sizes: '192x192',
-                                    src: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                                    type: 'image/png',
-                                }],
-                                downloadTotal: 0,
-                            }
-                        );
-                        console.log('Background fetch started:', fetch);
-                    } catch (err) {
-                        console.error('Background fetch failed:', err);
-                    }
-                });
             }
         }
 
@@ -459,9 +425,14 @@
                         requestBackgroundPermission();
                     }
 
-                    // Update background fetch interval
-                    if (isAlarmActive) {
-                        startBackgroundFetch();
+                    // Update periodic sync interval
+                    if (isAlarmActive && 'serviceWorker' in navigator && 'periodicSync' in registration) {
+                        registration.periodicSync.unregister('location-update')
+                            .then(() => {
+                                return registration.periodicSync.register('location-update', {
+                                    minInterval: settings.updateInterval * 60 * 1000 // Convert minutes to milliseconds
+                                });
+                            });
                     }
                 }
                 showAlert('Settings saved successfully!', 'success');
@@ -549,7 +520,9 @@
                     audio.src = 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3';
                     break;
                 case 'radar':
-                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2569/2569-preview.mp3';
+                    audio.src = 'https://assets.mix
+
+kit.co/active_storage/sfx/2569/2569-preview.mp3';
                     break;
                 case 'beacon':
                     audio.src = 'https://assets.mixkit.co/active_storage/sfx/2570/2570-preview.mp3';
@@ -632,14 +605,6 @@
             } else {
                 showAlert('Background location permission is not supported in this browser', 'error');
             }
-        }
-
-        function formatNotificationTime(date) {
-          return date.toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-          }).toUpperCase();
         }
 
         let deferredPrompt;
