@@ -166,10 +166,8 @@
                     navigator.vibrate([200, 100, 200]);
                 }
 
-                // Show notification if enabled
-                if (settings.enableNotifications) {
-                    showNotification('OpenTravel Alarm', 'You have reached your destination!');
-                }
+                // Show notification
+                showNotification('OpenTravel Alarm', 'You have reached your destination!');
             }
         }
 
@@ -183,6 +181,13 @@
             document.getElementById('stopAlarm').classList.add('hidden');
             document.getElementById('setAlarm').classList.remove('hidden');
             showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
+            
+            // Stop background sync
+            if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.sync.unregister('alarm-sync');
+                });
+            }
         }
 
         // Update user location
@@ -293,10 +298,13 @@
                                 cache.put('/alarm-settings', new Response(JSON.stringify({
                                     destination: destination,
                                     radius: alarmRadius,
-                                enableNotifications: settings.enableNotifications
+                                    enableNotifications: settings.enableNotifications
                                 })));
                             });
                         }
+
+                        // Request wake lock
+                        requestWakeLock();
                     } else {
                         showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
                     }
@@ -310,7 +318,24 @@
         // Show notification
         function showNotification(title, body) {
             if ("Notification" in window && Notification.permission === "granted") {
-                new Notification(title, { body: body });
+                new Notification(title, { 
+                    body: body,
+                    icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png'
+                });
+            }
+        }
+
+        // Request wake lock
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    await navigator.wakeLock.request('screen');
+                    console.log('Wake Lock is active');
+                } catch (err) {
+                    console.error(`${err.name}, ${err.message}`);
+                }
+            } else {
+                console.log('Wake Lock API not supported');
             }
         }
 
