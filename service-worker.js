@@ -39,89 +39,52 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-let journeyState = {
-  active: false,
-  startTime: null,
-  destination: null,
-  initialDistance: null,
-  radius: null,
-  updateInterval: 30
-};
+let journeyState = null;
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'START_JOURNEY') {
-    journeyState = {
-      active: true,
-      startTime: new Date(),
-      destination: event.data.settings.destination,
-      initialDistance: event.data.settings.initialDistance,
-      radius: event.data.settings.radius,
-      updateInterval: event.data.settings.updateInterval || 30
-    };
-    
-    showJourneyNotification('start');
-    startJourneyUpdates();
+    journeyState = event.data.settings;
+    journeyState.startTime = new Date();
+    startJourney();
   }
 });
 
-function startJourneyUpdates() {
-  if (journeyState.active) {
-    setInterval(() => {
-      if (journeyState.active) {
-        updateJourneyProgress();
-      }
-    }, journeyState.updateInterval * 1000);
+function startJourney() {
+  if (journeyState) {
+    const estimatedTime = calculateEstimatedTime();
+    sendStatusNotification('start', estimatedTime);
+    
+    // Simulate journey end after estimated time
+    setTimeout(() => {
+      sendStatusNotification('end');
+      journeyState = null;
+    }, estimatedTime.getTime() - Date.now());
   }
 }
 
-function updateJourneyProgress() {
-  // Simulating progress update
-  const progress = Math.min(100, (Date.now() - journeyState.startTime) / (30 * 60 * 1000) * 100);
-  const remainingDistance = Math.max(0, journeyState.initialDistance * (1 - progress / 100));
-
-  if (progress < 100) {
-    showJourneyNotification('progress', progress, remainingDistance);
-  } else {
-    showJourneyNotification('end');
-    journeyState.active = false;
-  }
-}
-
-function showJourneyNotification(type, progress = 0, remainingDistance = 0) {
+function sendStatusNotification(type, estimatedTime) {
   const title = 'OpenTravel';
   const options = {
     icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
     badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    tag: 'opentravel-journey',
+    tag: 'opentravel-status',
     renotify: true,
     requireInteraction: true,
     actions: [{ action: 'open', title: 'View' }],
-    data: { type, progress }
+    timestamp: Date.now()
   };
 
-  let body = '';
-  let silent = false;
-
   if (type === 'start') {
-    const estimatedTime = calculateEstimatedTime();
-    body = `Journey started. Estimated arrival by ${formatTime(estimatedTime)}`;
-  } else if (type === 'progress') {
-    body = `${formatDistance(remainingDistance)} to destination`;
-    silent = true;
+    options.body = `Arrival by ${formatTime(estimatedTime)}`;
   } else if (type === 'end') {
-    body = 'You have reached your destination!';
+    options.body = 'You have reached your destination!';
     options.vibrate = [200, 100, 200];
   }
-
-  options.body = body;
-  options.silent = silent;
 
   self.registration.showNotification(title, options);
 }
 
 function calculateEstimatedTime() {
-  if (!journeyState.active) return null;
-  
   const speed = 50; // assumed average speed in km/h
   const timeInHours = journeyState.initialDistance / (speed * 1000);
   const timeInMs = timeInHours * 60 * 60 * 1000;
@@ -130,17 +93,11 @@ function calculateEstimatedTime() {
 }
 
 function formatTime(date) {
-  return date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
+  return date.toLocaleTimeString('en-US', { 
+    hour: 'numeric', 
     minute: '2-digit',
-    hour12: true
+    hour12: true 
   });
-}
-
-function formatDistance(meters) {
-  return meters > 1000 
-    ? `${(meters/1000).toFixed(1)} km`
-    : `${Math.round(meters)} m`;
 }
 
 self.addEventListener('notificationclick', (event) => {
