@@ -12,9 +12,37 @@ const urlsToCache = [
 ];
 
 self.addEventListener('install', (event) => {
+  console.log('Service worker installing...');
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(urlsToCache))
+      .then((cache) => {
+        console.log('Cache opened');
+        return cache.addAll(urlsToCache);
+      })
+      .then(() => {
+        console.log('Service worker installed');
+        return self.skipWaiting();
+      })
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  console.log('Service worker activating...');
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            console.log('Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
+    .then(() => {
+      console.log('Service worker activated');
+      return self.clients.claim();
+    })
   );
 });
 
@@ -25,24 +53,11 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-  );
-});
-
 let alarmSettings = null;
 let notificationSent = { start: false, near: false };
 
 self.addEventListener('message', (event) => {
+  console.log('Service worker received message:', event.data);
   if (event.data && event.data.type === 'START_JOURNEY') {
     alarmSettings = event.data.settings;
     notificationSent = { start: false, near: false };
@@ -158,4 +173,4 @@ self.addEventListener('sync', (event) => {
   }
 });
 
-console.log('Modified service worker loaded');
+console.log('Service worker script loaded');
