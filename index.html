@@ -141,7 +141,7 @@
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
             alarmSound: 'default',
             volume: 0.5,
-            enableNotifications: false,
+            enableNotifications: true,
             locationPermission: 'whileInUse',
             updateInterval: 5
         };
@@ -320,8 +320,9 @@
                             });
                         }
 
-                        // Start background updates
+                        // Start background updates and send initial notification
                         startBackgroundUpdates();
+                        sendInitialNotification(destination);
                     } else {
                         showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
                     }
@@ -369,7 +370,12 @@
                 navigator.serviceWorker.ready.then(registration => {
                     registration.active.postMessage({
                         type: 'START_BACKGROUND_UPDATES',
-                        settings: settings,
+                        settings: {
+                            destination: destination,
+                            radius: alarmRadius,
+                            enableNotifications: settings.enableNotifications,
+                            updateInterval: settings.updateInterval
+                        },
                         notificationOptions: {
                             icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
                             badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
@@ -381,6 +387,44 @@
                     });
                 });
             }
+        }
+
+        // Send initial notification
+        function sendInitialNotification(destination) {
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    const distance = calculateDistance(position.coords, {latitude: destination[0], longitude: destination[1]});
+                    const formattedDistance = formatDistance(distance);
+                    showNotification('OpenTravel Monitoring Started', `Initial distance to destination: ${formattedDistance}`);
+                },
+                error => {
+                    console.error('Error getting initial location:', error);
+                    showNotification('OpenTravel Monitoring Started', 'Unable to get initial distance. Monitoring started.');
+                }
+            );
+        }
+
+        // Calculate distance between two points
+        function calculateDistance(point1, point2) {
+            const R = 6371e3; // Earth's radius in meters
+            const φ1 = point1.latitude * Math.PI/180;
+            const φ2 = point2.latitude * Math.PI/180;
+            const Δφ = (point2.latitude - point1.latitude) * Math.PI/180;
+            const Δλ = (point2.longitude - point1.longitude) * Math.PI/180;
+
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+            return R * c; // Distance in meters
+        }
+
+        // Format distance
+        function formatDistance(meters) {
+            return meters > 1000 
+                ? `${(meters/1000).toFixed(1)} km` 
+                : `${Math.round(meters)} m`;
         }
 
         // Initialize the app
@@ -618,7 +662,8 @@
             installButton.classList.add('fixed', 'bottom-4', 'right-4', 'bg-green-500', 'text-white', 'p-2', 'rounded-full', 'shadow-lg');
             installButton.addEventListener('click', () => {
                 deferredPrompt.prompt();
-                deferredPrompt.userChoice.then((choiceResult) => {
+                deferredProm
+pt.userChoice.then((choiceResult) => {
                     if (choiceResult.outcome === 'accepted') {
                         console.log('User accepted the install prompt');
                     } else {
