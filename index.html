@@ -324,6 +324,7 @@
                         // Start journey in service worker
                         if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
                             navigator.serviceWorker.ready.then(registration => {
+                                console.log('Sending START_JOURNEY message to service worker');
                                 registration.active.postMessage({
                                     type: 'START_JOURNEY',
                                     settings: {
@@ -333,7 +334,11 @@
                                     }
                                 });
                             });
+                        } else {
+                            console.error('Service worker not available or not controlling the page');
                         }
+
+                        showAlert('Alarm set successfully!', 'success');
                     } else {
                         showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
                     }
@@ -342,6 +347,30 @@
                     console.error('Error geocoding destination:', error);
                     showAlert('Error finding destination. Please try again.', 'error');
                 });
+        }
+
+        function checkNotificationSupport() {
+            if (!('Notification' in window)) {
+                console.error('This browser does not support notifications');
+                return false;
+            }
+
+            if (Notification.permission === 'denied') {
+                console.warn('Notifications are blocked by the user');
+                showAlert('Please enable notifications in your browser settings for this site to receive alerts.', 'warning');
+                return false;
+            }
+
+            if (Notification.permission !== 'granted') {
+                Notification.requestPermission().then(permission => {
+                    if (permission !== 'granted') {
+                        console.warn('Notification permission not granted');
+                        showAlert('Notifications are not enabled. You may miss important alerts.', 'warning');
+                    }
+                });
+            }
+
+            return true;
         }
 
         // Initialize the app
@@ -439,6 +468,9 @@
                 Notification.requestPermission();
             }
 
+            // Check notification support
+            checkNotificationSupport();
+
             // Register service worker
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('/service-worker.js')
@@ -507,6 +539,11 @@
                 alertIcon.classList.add('bg-blue-100');
                 alertIcon.innerHTML = '<i data-lucide="info" class="w-5 h-5 text-blue-500"></i>';
                 alertTitle.textContent = 'Information';
+            } else if (type === 'warning') {
+                alertPopup.classList.add('border-l-4', 'border-yellow-500');
+                alertIcon.classList.add('bg-yellow-100');
+                alertIcon.innerHTML = '<i data-lucide="alert-triangle" class="w-5 h-5 text-yellow-500"></i>';
+                alertTitle.textContent = 'Warning!';
             } else {
                 alertPopup.classList.add('border-l-4', 'border-red-500');
                 alertIcon.classList.add('bg-red-100');
@@ -530,8 +567,8 @@
             const alertPopup = document.getElementById('alertPopup');
             alertPopup.classList.remove('opacity-100', 'translate-y-0');
             alertPopup.classList.add('opacity-0', '-translate-y-full');
-            alertPopup.classList.remove('border-l-4', 'border-green-500', 'border-red-500', 'border-blue-500');
-            document.getElementById('alertIcon').classList.remove('bg-green-100', 'bg-red-100', 'bg-blue-100');
+            alertPopup.classList.remove('border-l-4', 'border-green-500', 'border-red-500', 'border-blue-500', 'border-yellow-500');
+            document.getElementById('alertIcon').classList.remove('bg-green-100', 'bg-red-100', 'bg-blue-100', 'bg-yellow-100');
         }
     </script>
 </body>
