@@ -19,34 +19,14 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request).then((response) => {
-        if (response.headers.get('Content-Type').includes('text/html')) {
-          return response.text().then((html) => {
-            const userAgent = event.request.headers.get('User-Agent');
-            if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) {
-              html = html.replace('</head>', `
-                <script>
-                  if (!navigator.userAgent.includes('Chrome')) {
-                    const chromeUrl = 'googlechrome://navigate?url=' + encodeURIComponent(window.location.href);
-                    window.location.href = chromeUrl;
-                  }
-                </script>
-              </head>`);
-            }
-            return new Response(html, {
-              headers: response.headers
-            });
-          });
-        }
-        return response;
-      })
-    );
-  } else {
-    event.respondWith(
-      caches.match(event.request)
-        .then((response) => response || fetch(event.request))
-    );
+  event.respondWith(
+    caches.match(event.request)
+      .then((response) => response || fetch(event.request))
+  );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
   }
 });
