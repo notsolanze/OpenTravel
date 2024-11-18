@@ -90,6 +90,20 @@
                 <label for="volume" class="block text-sm font-medium text-gray-700 mb-1">Alarm Volume</label>
                 <input type="range" id="volume" min="0" max="1" step="0.1" value="0.5" class="w-full">
             </div>
+            <div class="mb-4">
+                <label class="flex items-center">
+                    <input type="checkbox" id="enableNotifications" class="form-checkbox h-5 w-5 text-green-600">
+                    <span class="ml-2 text-sm text-gray-700">Enable Notifications</span>
+                </label>
+            </div>
+            <div class="mb-4">
+                <label for="locationPermission" class="block text-sm font-medium text-gray-700 mb-1">Location Permission</label>
+                <select id="locationPermission" class="w-full p-3 border border-gray-300 rounded-full focus:ring-green-500 focus:border-green-500">
+                    <option value="always">Always</option>
+                    <option value="whileInUse">While Using the App</option>
+                    <option value="never">Never</option>
+                </select>
+            </div>
             <button id="saveSettings" class="w-full bg-green-500 text-white p-3 rounded-lg hover:bg-green-600 transition duration-300">
                 Save Settings
             </button>
@@ -122,7 +136,9 @@
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
             alarmSound: 'default',
-            volume: 0.5
+            volume: 0.5,
+            enableNotifications: false,
+            locationPermission: 'whileInUse'
         };
         
         // Initialize map
@@ -150,8 +166,8 @@
                     navigator.vibrate([200, 100, 200]);
                 }
 
-                // Show notification if the page is hidden
-                if (document.hidden) {
+                // Show notification if enabled
+                if (settings.enableNotifications) {
                     showNotification('OpenTravel Alarm', 'You have reached your destination!');
                 }
             }
@@ -276,7 +292,8 @@
                             caches.open('opentravel-cache-v1').then(cache => {
                                 cache.put('/alarm-settings', new Response(JSON.stringify({
                                     destination: destination,
-                                    radius: alarmRadius
+                                    radius: alarmRadius,
+                                enableNotifications: settings.enableNotifications
                                 })));
                             });
                         }
@@ -292,12 +309,8 @@
 
         // Show notification
         function showNotification(title, body) {
-            if ("Notification" in window) {
-                Notification.requestPermission().then(function (permission) {
-                    if (permission === "granted") {
-                        new Notification(title, { body: body });
-                    }
-                });
+            if ("Notification" in window && Notification.permission === "granted") {
+                new Notification(title, { body: body });
             }
         }
 
@@ -312,16 +325,36 @@
                 document.getElementById('settingsPage').classList.remove('hidden');
                 document.getElementById('alarmSound').value = settings.alarmSound;
                 document.getElementById('volume').value = settings.volume;
+                document.getElementById('enableNotifications').checked = settings.enableNotifications;
+                document.getElementById('locationPermission').value = settings.locationPermission;
             });
 
             document.getElementById('saveSettings').addEventListener('click', () => {
                 const newAlarmSound = document.getElementById('alarmSound').value;
                 const newVolume = parseFloat(document.getElementById('volume').value);
-                if (newAlarmSound !== settings.alarmSound || newVolume !== settings.volume) {
+                const newEnableNotifications = document.getElementById('enableNotifications').checked;
+                const newLocationPermission = document.getElementById('locationPermission').value;
+                
+                if (newAlarmSound !== settings.alarmSound || 
+                    newVolume !== settings.volume || 
+                    newEnableNotifications !== settings.enableNotifications ||
+                    newLocationPermission !== settings.locationPermission) {
+                    
                     settings.alarmSound = newAlarmSound;
                     settings.volume = newVolume;
+                    settings.enableNotifications = newEnableNotifications;
+                    settings.locationPermission = newLocationPermission;
+                    
                     sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
                     updateAlarmSound();
+                    
+                    if (newEnableNotifications && Notification.permission !== "granted") {
+                        Notification.requestPermission();
+                    }
+                    
+                    if (newLocationPermission === 'always') {
+                        requestBackgroundPermission();
+                    }
                 }
                 showAlert('Settings saved successfully!', 'success');
             });
@@ -333,9 +366,16 @@
 
             document.getElementById('resetSession').addEventListener('click', () => {
                 sessionStorage.removeItem('alarmSettings');
-                settings = { alarmSound: 'default', volume: 0.5 };
+                settings = { 
+                    alarmSound: 'default', 
+                    volume: 0.5, 
+                    enableNotifications: false,
+                    locationPermission: 'whileInUse'
+                };
                 document.getElementById('alarmSound').value = 'default';
                 document.getElementById('volume').value = '0.5';
+                document.getElementById('enableNotifications').checked = false;
+                document.getElementById('locationPermission').value = 'whileInUse';
                 document.getElementById('destination').value = '';
                 document.getElementById('radius').value = '1000';
                 updateAlarmSound();
@@ -368,8 +408,8 @@
             // Initialize Lucide icons
             lucide.createIcons();
 
-            // Request notification permission
-            if ("Notification" in window) {
+            // Request notification permission if enabled
+            if (settings.enableNotifications && Notification.permission !== "granted") {
                 Notification.requestPermission();
             }
 
@@ -459,6 +499,22 @@
             alertPopup.classList.add('opacity-0', '-translate-y-full');
             alertPopup.classList.remove('border-l-4', 'border-green-500', 'border-red-500', 'border-blue-500');
             document.getElementById('alertIcon').classList.remove('bg-green-100', 'bg-red-100', 'bg-blue-100');
+        }
+
+        function requestBackgroundPermission() {
+            if ('permissions' in navigator) {
+                navigator.permissions.query({name:'geolocation'}).then(function(result) {
+                    if (result.state === 'granted') {
+                        showAlert('Background location permission granted', 'success');
+                    } else if (result.state === 'prompt') {
+                        showAlert('Please allow background location access when prompted', 'info');
+                    } else if (result.state === 'denied') {
+                        showAlert('Background location permission denied. Please enable it in your browser settings.', 'error');
+                    }
+                });
+            } else {
+                showAlert('Background location permission is not supported in this browser', 'error');
+            }
         }
 
         let deferredPrompt;
