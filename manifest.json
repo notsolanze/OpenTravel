@@ -1,20 +1,21 @@
 {
-    "name": "OpenTravel",
-    "short_name": "OpenTravel",
-    "description": "A location-based alarm app for travelers",
-    "start_url": "/",
-    "display": "standalone",
-    "background_color": "#ffffff",
-    "theme_color": "#10B981",
-    "icons": [
-      {
-        "src": "https://cdn-icons-png.flaticon.com/128/10473/10473293.png",
-        "sizes": "128x128",
-        "type": "image/png"
-      }
-    ],
-    "permissions": [
-      "geolocation",
-      "background-sync"
-    ]
-  }
+  "name": "OpenTravel",
+  "short_name": "OpenTravel",
+  "description": "A location-based alarm app for travelers",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#10B981",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/128/10473/10473293.png",
+      "sizes": "128x128",
+      "type": "image/png"
+    }
+  ],
+  "permissions": [
+    "geolocation",
+    "background-sync",
+    "notifications"
+  ]
+}
