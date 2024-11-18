@@ -39,57 +39,75 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-let journeyState = null;
+let journeySettings = null;
+let notificationId = 'opentravel-journey';
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'START_JOURNEY') {
-    journeyState = event.data.settings;
-    journeyState.startTime = new Date();
+    journeySettings = event.data.settings;
     startJourney();
+  } else if (event.data && event.data.type === 'UPDATE_PROGRESS') {
+    updateProgress(event.data.progress, event.data.distance);
+  } else if (event.data && event.data.type === 'STOP_JOURNEY') {
+    stopJourney();
   }
 });
 
 function startJourney() {
-  if (journeyState) {
+  if (journeySettings) {
     const estimatedTime = calculateEstimatedTime();
-    sendStatusNotification('start', estimatedTime);
-    
-    // Simulate journey end after estimated time
-    setTimeout(() => {
-      sendStatusNotification('end');
-      journeyState = null;
-    }, estimatedTime.getTime() - Date.now());
+    sendNotification('Journey Started', `Estimated arrival by ${formatTime(estimatedTime.end)}`, 0);
   }
 }
 
-function sendStatusNotification(type, estimatedTime) {
-  const title = 'OpenTravel';
+function updateProgress(progress, distanceText) {
+  if (journeySettings) {
+    self.registration.getNotifications({ tag: notificationId }).then(notifications => {
+      if (notifications.length > 0) {
+        const notification = notifications[0];
+        notification.close();
+        sendNotification('OpenTravel Progress', distanceText, progress);
+      }
+    });
+  }
+}
+
+function stopJourney() {
+  sendNotification('Journey Completed', 'You have reached your destination!', 100);
+  journeySettings = null;
+}
+
+function sendNotification(title, body, progress) {
   const options = {
+    body: body,
     icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
     badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    tag: 'opentravel-status',
+    tag: notificationId,
     renotify: true,
-    requireInteraction: true,
-    actions: [{ action: 'open', title: 'View' }],
-    timestamp: Date.now()
+    silent: progress > 0 && progress < 100, // Silent updates for progress
+    data: { progress: progress }
   };
 
-  if (type === 'start') {
-    options.body = `Arrival by ${formatTime(estimatedTime)}`;
-  } else if (type === 'end') {
-    options.body = 'You have reached your destination!';
-    options.vibrate = [200, 100, 200];
+  if (progress > 0 && progress < 100) {
+    options.actions = [
+      { action: 'view', title: 'View Map' }
+    ];
   }
 
   self.registration.showNotification(title, options);
 }
 
 function calculateEstimatedTime() {
+  const now = new Date();
   const speed = 50; // assumed average speed in km/h
-  const timeInHours = journeyState.initialDistance / (speed * 1000);
+  const distance = journeySettings.initialDistance;
+  const timeInHours = distance / (speed * 1000); // convert distance to km
   const timeInMs = timeInHours * 60 * 60 * 1000;
-  
-  return new Date(journeyState.startTime.getTime() + timeInMs);
+
+  return {
+    start: now,
+    end: new Date(now.getTime() + timeInMs)
+  };
 }
 
 function formatTime(date) {
@@ -102,7 +120,13 @@ function formatTime(date) {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  if (event.action === 'open') {
-    clients.openWindow('/');
+  if (event.action === 'view') {
+    event.waitUntil(clients.openWindow('/'));
+  }
+});
+
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'alarm-sync') {
+    event.waitUntil(checkLocation());
   }
 });
