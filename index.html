@@ -27,32 +27,6 @@
             border-radius: 20px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        input[type="range"] {
-            -webkit-appearance: none;
-            width: 100%;
-            height: 5px;
-            border-radius: 5px;
-            background: #d3d3d3;
-            outline: none;
-            opacity: 0.7;
-            transition: opacity .2s;
-        }
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: #4CAF50;
-            cursor: pointer;
-        }
-        input[type="range"]::-moz-range-thumb {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: #4CAF50;
-            cursor: pointer;
-        }
         #alertPopup {
             z-index: 1000;
         }
@@ -144,7 +118,6 @@
         let watchId, destination, alarmRadius;
         let isAlarmPlaying = false;
         let isAlarmActive = false;
-        let worker;
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
@@ -194,10 +167,6 @@
             document.getElementById('stopAlarm').classList.add('hidden');
             document.getElementById('setAlarm').classList.remove('hidden');
             showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
-            if (worker) {
-                worker.terminate();
-                worker = null;
-            }
         }
 
         // Update user location
@@ -295,8 +264,22 @@
                         sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
                         isAlarmActive = true;
 
-                        // Start the Web Worker
-                        startWorker();
+                        // Register for background sync
+                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                            navigator.serviceWorker.ready.then(registration => {
+                                registration.sync.register('alarm-sync');
+                            });
+                        }
+
+                        // Save alarm settings to cache for service worker
+                        if ('caches' in window) {
+                            caches.open('opentravel-cache-v1').then(cache => {
+                                cache.put('/alarm-settings', new Response(JSON.stringify({
+                                    destination: destination,
+                                    radius: alarmRadius
+                                })));
+                            });
+                        }
                     } else {
                         showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
                     }
@@ -305,27 +288,6 @@
                     console.error('Error geocoding destination:', error);
                     showAlert('Error finding destination. Please try again.', 'error');
                 });
-        }
-
-        // Start Web Worker
-        function startWorker() {
-            if (typeof(Worker) !== "undefined") {
-                if (!worker) {
-                    worker = new Worker('worker.js');
-                    worker.postMessage({
-                        type: 'start',
-                        destination: destination,
-                        radius: alarmRadius
-                    });
-                    worker.onmessage = function(e) {
-                        if (e.data.type === 'alarm') {
-                            playAlarm();
-                        }
-                    };
-                }
-            } else {
-                console.log('Web Workers are not supported in your browser');
-            }
         }
 
         // Show notification
@@ -410,6 +372,17 @@
             if ("Notification" in window) {
                 Notification.requestPermission();
             }
+
+            // Register service worker
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(registration => {
+                        console.log('Service Worker registered with scope:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.error('Service Worker registration failed:', error);
+                    });
+            }
         });
 
         function updateAlarmSound() {
@@ -493,12 +466,10 @@
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             deferredPrompt = e;
-            // Show your custom "Add to Home Screen" button or banner here
             showInstallPrompt();
         });
 
         function showInstallPrompt() {
-            // Create and show a button or banner to prompt installation
             const installButton = document.createElement('button');
             installButton.textContent = 'Install OpenTravel';
             installButton.classList.add('fixed', 'bottom-4', 'right-4', 'bg-green-500', 'text-white', 'p-2', 'rounded-full', 'shadow-lg');
@@ -514,20 +485,6 @@
                 });
             });
             document.body.appendChild(installButton);
-        }
-    </script>
-
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('/service-worker.js')
-                    .then((registration) => {
-                        console.log('Service Worker registered successfully:', registration.scope);
-                    })
-                    .catch((error) => {
-                        console.log('Service Worker registration failed:', error);
-                    });
-            });
         }
     </script>
 </body>
