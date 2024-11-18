@@ -11,6 +11,7 @@ const urlsToCache = [
   'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'
 ];
 
+// Caching assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(urlsToCache))
@@ -38,7 +39,8 @@ self.addEventListener('activate', (event) => {
 });
 
 let alarmSettings = null;
-let notificationSent = { start: false, near: false }; // Track notifications
+let notificationSent = { start: false, near: false }; // Flags to prevent multiple notifications
+let journeyInterval = null; // To clear the interval later
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'START_JOURNEY') {
@@ -52,8 +54,9 @@ function startJourney() {
   if (alarmSettings) {
     const estimatedTime = calculateEstimatedTime();
     sendStatusNotification('start', estimatedTime);
-    notificationSent.start = true; // Mark the "start" notification as sent
-    setInterval(() => {
+    notificationSent.start = true; // Mark "start" notification as sent
+
+    journeyInterval = setInterval(() => {
       checkLocation();
     }, alarmSettings.updateInterval * 1000);
   }
@@ -67,11 +70,12 @@ async function checkLocation() {
       { latitude: alarmSettings.destination[0], longitude: alarmSettings.destination[1] }
     );
 
+    // If within 300 meters and "near" notification not yet sent
     if (distance <= alarmSettings.radius && !notificationSent.near) {
-      // Send notification when near the set radius
       sendStatusNotification('end');
-      notificationSent.near = true; // Mark the "near" notification as sent
-      self.registration.unregister(); // Unregister service worker if required
+      notificationSent.near = true; // Mark "near" notification as sent
+      clearInterval(journeyInterval); // Stop further checks
+      self.registration.unregister(); // Unregister service worker if needed
     }
   } catch (error) {
     console.error('Error checking location:', error);
