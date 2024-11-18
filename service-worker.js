@@ -70,36 +70,44 @@ async function checkAlarmCondition() {
     const distance = calculateDistance(currentPosition, settings.destination);
     
     if (distance <= settings.radius) {
-      if (settings.enableNotifications) {
-        self.registration.showNotification('OpenTravel Alarm', {
-          body: 'You have reached your destination!',
-          icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-          vibrate: [200, 100, 200]
+      self.registration.showNotification('OpenTravel Alarm', {
+        body: 'You have reached your destination!',
+        icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        vibrate: [200, 100, 200]
+      });
+      
+      // Play alarm sound
+      const clients = await self.clients.matchAll();
+      clients.forEach(client => {
+        client.postMessage({
+          type: 'PLAY_ALARM'
         });
-      }
-      // You can add more actions here, like playing a sound
+      });
     }
   }
 }
 
 function getCurrentPosition() {
   return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(resolve, reject);
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 5000
+    });
   });
 }
 
 function calculateDistance(position1, position2) {
-  // Haversine formula to calculate distance between two points
   const R = 6371e3; // Earth's radius in meters
   const φ1 = position1.coords.latitude * Math.PI/180;
   const φ2 = position2[0] * Math.PI/180;
   const Δφ = (position2[0] - position1.coords.latitude) * Math.PI/180;
   const Δλ = (position2[1] - position1.coords.longitude) * Math.PI/180;
 
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const a = Math.sin(Δφ/2)  Math.sin(Δφ/2) +
+            Math.cos(φ1)  Math.cos(φ2) 
+            Math.sin(Δλ/2)  Math.sin(Δλ/2);
+  const c = 2  Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
-  return R * c; // Distance in meters
+  return R  c; // Distance in meters
 }
