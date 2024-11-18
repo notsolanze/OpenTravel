@@ -52,8 +52,7 @@ self.addEventListener('message', (event) => {
 
 function startJourney() {
   if (alarmSettings) {
-    const estimatedTime = calculateEstimatedTime();
-    sendStatusNotification('start', estimatedTime);
+    sendStatusNotification('start');
     notificationSent.start = true;
     setInterval(() => {
       checkLocation();
@@ -82,34 +81,6 @@ async function checkLocation() {
   }
 }
 
-function sendStatusNotification(type, estimatedTime) {
-  if ((type === 'start' && notificationSent.start) || (type === 'near' && notificationSent.near)) {
-    return; // Don't send duplicate notifications
-  }
-
-  const title = 'OpenTravel';
-  const options = {
-    icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    tag: 'opentravel-status',
-    renotify: true,
-    requireInteraction: true,
-    actions: [{ action: 'open', title: 'View' }],
-    timestamp: Date.now()
-  };
-
-  if (type === 'start') {
-    options.body = `Journey started. Estimated arrival by ${formatTime(estimatedTime.end)}`;
-    notificationSent.start = true;
-  } else if (type === 'near') {
-    options.body = 'You are within 300 meters of your destination!';
-    options.vibrate = [200, 100, 200];
-    notificationSent.near = true;
-  }
-
-  self.registration.showNotification(title, options);
-}
-
 function getCurrentPosition() {
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -135,31 +106,38 @@ function calculateDistance(point1, point2) {
   return R * c; // Distance in meters
 }
 
-function calculateEstimatedTime() {
-  const now = new Date();
-  const speed = 50; // assumed average speed in km/h
-  const distance = alarmSettings.initialDistance;
-  const timeInHours = distance / (speed * 1000); // convert distance to km
-  const timeInMs = timeInHours * 60 * 60 * 1000;
-  
-  return {
-    start: now,
-    end: new Date(now.getTime() + timeInMs)
+function sendStatusNotification(type) {
+  const title = 'OpenTravel';
+  const options = {
+    icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+    badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+    tag: 'opentravel-status',
+    renotify: true,
+    requireInteraction: true,
+    actions: [{ action: 'open', title: 'View' }],
+    timestamp: Date.now()
   };
-}
 
-function formatTime(date) {
-  return date.toLocaleTimeString('en-US', { 
-    hour: 'numeric', 
-    minute: '2-digit',
-    hour12: true 
-  });
+  if (type === 'start') {
+    options.body = 'Your journey has started!';
+  } else if (type === 'near') {
+    options.body = 'You are within 300 meters of your destination!';
+    options.vibrate = [200, 100, 200];
+  }
+
+  self.registration.showNotification(title, options);
 }
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   if (event.action === 'open') {
     clients.openWindow('/');
+  }
+});
+
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'alarm-sync') {
+    event.waitUntil(checkLocation());
   }
 });
 
