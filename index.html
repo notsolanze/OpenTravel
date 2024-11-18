@@ -97,6 +97,10 @@
                 </label>
             </div>
             <div class="mb-4">
+                <label for="updateInterval" class="block text-sm font-medium text-gray-700 mb-1">Background Update Interval (minutes)</label>
+                <input type="number" id="updateInterval" class="w-full p-3 border border-gray-300 rounded-full focus:ring-green-500 focus:border-green-500" value="5" min="1" max="60">
+            </div>
+            <div class="mb-4">
                 <label for="locationPermission" class="block text-sm font-medium text-gray-700 mb-1">Location Permission</label>
                 <select id="locationPermission" class="w-full p-3 border border-gray-300 rounded-full focus:ring-green-500 focus:border-green-500">
                     <option value="always">Always</option>
@@ -138,7 +142,8 @@
             alarmSound: 'default',
             volume: 0.5,
             enableNotifications: false,
-            locationPermission: 'whileInUse'
+            locationPermission: 'whileInUse',
+            updateInterval: 5
         };
         
         // Initialize map
@@ -188,6 +193,18 @@
                     registration.sync.unregister('alarm-sync');
                 });
             }
+
+            // Stop background fetch
+            if ('serviceWorker' in navigator && 'BackgroundFetchManager' in self) {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.backgroundFetch.get('location-update')
+                        .then(backgroundFetch => {
+                            if (backgroundFetch) {
+                                backgroundFetch.abort();
+                            }
+                        });
+                });
+            }
         }
 
         // Update user location
@@ -209,13 +226,24 @@
 
             if (destination && isAlarmActive) {
                 const distance = map.distance([latitude, longitude], destination);
-                document.getElementById('distance').textContent = `Distance: ${formatNumber(Math.round(distance))} meters`;
+                updateDistanceDisplay(distance);
                 
                 if (distance <= alarmRadius && !isAlarmPlaying) {
                     playAlarm();
                     document.getElementById('status').textContent = 'You have reached your destination!';
                     document.getElementById('status').classList.add('text-green-600', 'font-semibold');
                 }
+            }
+        }
+
+        // Update distance display
+        function updateDistanceDisplay(distance) {
+            const distanceText = `Distance: ${formatNumber(Math.round(distance))} meters`;
+            document.getElementById('distance').textContent = distanceText;
+            
+            // Update notification if enabled
+            if (settings.enableNotifications) {
+                showNotification('OpenTravel Distance Update', distanceText);
             }
         }
 
@@ -298,13 +326,17 @@
                                 cache.put('/alarm-settings', new Response(JSON.stringify({
                                     destination: destination,
                                     radius: alarmRadius,
-                                    enableNotifications: settings.enableNotifications
+                                    enableNotifications: settings.enableNotifications,
+                                    updateInterval: settings.updateInterval
                                 })));
                             });
                         }
 
                         // Request wake lock
                         requestWakeLock();
+
+                        // Start background fetch for periodic updates
+                        startBackgroundFetch();
                     } else {
                         showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
                     }
@@ -339,6 +371,32 @@
             }
         }
 
+        // Start background fetch
+        function startBackgroundFetch() {
+            if ('serviceWorker' in navigator && 'BackgroundFetchManager' in self) {
+                navigator.serviceWorker.ready.then(async (registration) => {
+                    try {
+                        const fetch = await registration.backgroundFetch.fetch(
+                            'location-update',
+                            ['/update-location'],
+                            {
+                                title: 'Location Update',
+                                icons: [{
+                                    sizes: '192x192',
+                                    src: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                                    type: 'image/png',
+                                }],
+                                downloadTotal: 0,
+                            }
+                        );
+                        console.log('Background fetch started:', fetch);
+                    } catch (err) {
+                        console.error('Background fetch failed:', err);
+                    }
+                });
+            }
+        }
+
         // Initialize the app
         document.addEventListener('DOMContentLoaded', () => {
             initMap();
@@ -351,6 +409,7 @@
                 document.getElementById('alarmSound').value = settings.alarmSound;
                 document.getElementById('volume').value = settings.volume;
                 document.getElementById('enableNotifications').checked = settings.enableNotifications;
+                document.getElementById('updateInterval').value = settings.updateInterval;
                 document.getElementById('locationPermission').value = settings.locationPermission;
             });
 
@@ -358,16 +417,19 @@
                 const newAlarmSound = document.getElementById('alarmSound').value;
                 const newVolume = parseFloat(document.getElementById('volume').value);
                 const newEnableNotifications = document.getElementById('enableNotifications').checked;
+                const newUpdateInterval = parseInt(document.getElementById('updateInterval').value);
                 const newLocationPermission = document.getElementById('locationPermission').value;
                 
                 if (newAlarmSound !== settings.alarmSound || 
                     newVolume !== settings.volume || 
                     newEnableNotifications !== settings.enableNotifications ||
+                    newUpdateInterval !== settings.updateInterval ||
                     newLocationPermission !== settings.locationPermission) {
                     
                     settings.alarmSound = newAlarmSound;
                     settings.volume = newVolume;
                     settings.enableNotifications = newEnableNotifications;
+                    settings.updateInterval = newUpdateInterval;
                     settings.locationPermission = newLocationPermission;
                     
                     sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
@@ -379,6 +441,11 @@
                     
                     if (newLocationPermission === 'always') {
                         requestBackgroundPermission();
+                    }
+
+                    // Update background fetch interval
+                    if (isAlarmActive) {
+                        startBackgroundFetch();
                     }
                 }
                 showAlert('Settings saved successfully!', 'success');
@@ -395,11 +462,13 @@
                     alarmSound: 'default', 
                     volume: 0.5, 
                     enableNotifications: false,
-                    locationPermission: 'whileInUse'
+                    locationPermission: 'whileInUse',
+                    updateInterval: 5
                 };
                 document.getElementById('alarmSound').value = 'default';
                 document.getElementById('volume').value = '0.5';
                 document.getElementById('enableNotifications').checked = false;
+                document.getElementById('updateInterval').value = '5';
                 document.getElementById('locationPermission').value = 'whileInUse';
                 document.getElementById('destination').value = '';
                 document.getElementById('radius').value = '1000';
@@ -448,6 +517,13 @@
                         console.error('Service Worker registration failed:', error);
                     });
             }
+
+            // Listen for messages from the service worker
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                if (event.data && event.data.type === 'LOCATION_UPDATE') {
+                    updateLocation(event.data.position);
+                }
+            });
         });
 
         function updateAlarmSound() {
