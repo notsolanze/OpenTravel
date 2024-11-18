@@ -116,9 +116,6 @@
                 <label for="volume" class="block text-sm font-medium text-gray-700 mb-1">Alarm Volume</label>
                 <input type="range" id="volume" min="0" max="1" step="0.1" value="0.5" class="w-full">
             </div>
-            <button id="installPWA" class="w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 transition duration-300 mt-4 hidden">
-                Install App
-            </button>
             <button id="saveSettings" class="w-full bg-green-500 text-white p-3 rounded-lg hover:bg-green-600 transition duration-300">
                 Save Settings
             </button>
@@ -496,25 +493,31 @@
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             deferredPrompt = e;
-            const installButton = document.getElementById('installPWA');
-            installButton.classList.remove('hidden');
+            // Show your custom "Add to Home Screen" button or banner here
+            showInstallPrompt();
         });
 
-        document.getElementById('installPWA').addEventListener('click', async () => {
-            if (deferredPrompt !== null) {
+        function showInstallPrompt() {
+            // Create and show a button or banner to prompt installation
+            const installButton = document.createElement('button');
+            installButton.textContent = 'Install OpenTravel';
+            installButton.classList.add('fixed', 'bottom-4', 'right-4', 'bg-green-500', 'text-white', 'p-2', 'rounded-full', 'shadow-lg');
+            installButton.addEventListener('click', () => {
                 deferredPrompt.prompt();
-                const { outcome } = await deferredPrompt.userChoice;
-                if (outcome === 'accepted') {
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('User accepted the install prompt');
+                    } else {
+                        console.log('User dismissed the install prompt');
+                    }
                     deferredPrompt = null;
-                }
-            }
-        });
+                });
+            });
+            document.body.appendChild(installButton);
+        }
+    </script>
 
-        window.addEventListener('appinstalled', (event) => {
-            console.log('OpenTravel app installed');
-            document.getElementById('installPWA').classList.add('hidden');
-        });
-
+    <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/service-worker.js')
