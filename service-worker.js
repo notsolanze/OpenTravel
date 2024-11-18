@@ -39,71 +39,123 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-let journeySettings = null;
-let notificationId = 'opentravel-journey';
+let alarmSettings = null;
+let notificationId = null;
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'START_JOURNEY') {
-    journeySettings = event.data.settings;
+    alarmSettings = event.data.settings;
     startJourney();
-  } else if (event.data && event.data.type === 'UPDATE_PROGRESS') {
-    updateProgress(event.data.progress, event.data.distance);
-  } else if (event.data && event.data.type === 'STOP_JOURNEY') {
-    stopJourney();
   }
 });
 
 function startJourney() {
-  if (journeySettings) {
+  if (alarmSettings) {
     const estimatedTime = calculateEstimatedTime();
-    sendNotification('Journey Started', `Estimated arrival by ${formatTime(estimatedTime.end)}`, 0);
+    sendStatusNotification('start', estimatedTime);
+    setInterval(() => {
+      checkLocation();
+    }, alarmSettings.updateInterval * 1000);
   }
 }
 
-function updateProgress(progress, distanceText) {
-  if (journeySettings) {
-    self.registration.getNotifications({ tag: notificationId }).then(notifications => {
+async function checkLocation() {
+  try {
+    const position = await getCurrentPosition();
+    const distance = calculateDistance(
+      position.coords, 
+      {latitude: alarmSettings.destination[0], longitude: alarmSettings.destination[1]}
+    );
+    const progress = calculateProgress(distance);
+    updateNotificationProgress(progress);
+    
+    if (distance <= alarmSettings.radius) {
+      sendStatusNotification('end');
+      self.registration.unregister();
+    }
+  } catch (error) {
+    console.error('Error checking location:', error);
+  }
+}
+
+function getCurrentPosition() {
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 5000
+    });
+  });
+}
+
+function calculateDistance(point1, point2) {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = point1.latitude * Math.PI/180;
+  const φ2 = point2.latitude * Math.PI/180;
+  const Δφ = (point2.latitude - point1.latitude) * Math.PI/180;
+  const Δλ = (point2.longitude - point1.longitude) * Math.PI/180;
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+  return R * c; // Distance in meters
+}
+
+function calculateProgress(currentDistance) {
+  const totalDistance = alarmSettings.initialDistance;
+  return Math.max(0, Math.min(100, ((totalDistance - currentDistance) / totalDistance) * 100));
+}
+
+function sendStatusNotification(type, estimatedTime) {
+  const title = 'OpenTravel';
+  const options = {
+    icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+    badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+    tag: 'opentravel-status',
+    renotify: true,
+    requireInteraction: true,
+    actions: [{ action: 'open', title: 'View' }],
+    timestamp: Date.now()
+  };
+
+  if (type === 'start') {
+    options.body = `Arrival by ${formatTime(estimatedTime.end)}`;
+    options.data = { type: 'start', progress: 0 };
+  } else if (type === 'end') {
+    options.body = 'You have reached your destination!';
+    options.data = { type: 'end', progress: 100 };
+    options.vibrate = [200, 100, 200];
+  }
+
+  self.registration.showNotification(title, options).then((notification) => {
+    notificationId = notification.tag;
+  });
+}
+
+function updateNotificationProgress(progress) {
+  if (notificationId) {
+    self.registration.getNotifications({ tag: notificationId }).then((notifications) => {
       if (notifications.length > 0) {
         const notification = notifications[0];
-        notification.close();
-        sendNotification('OpenTravel Progress', distanceText, progress);
+        const updatedOptions = {
+          ...notification.options,
+          data: { ...notification.data, progress: progress }
+        };
+        self.registration.showNotification(notification.title, updatedOptions);
       }
     });
   }
 }
 
-function stopJourney() {
-  sendNotification('Journey Completed', 'You have reached your destination!', 100);
-  journeySettings = null;
-}
-
-function sendNotification(title, body, progress) {
-  const options = {
-    body: body,
-    icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    tag: notificationId,
-    renotify: true,
-    silent: progress > 0 && progress < 100, // Silent updates for progress
-    data: { progress: progress }
-  };
-
-  if (progress > 0 && progress < 100) {
-    options.actions = [
-      { action: 'view', title: 'View Map' }
-    ];
-  }
-
-  self.registration.showNotification(title, options);
-}
-
 function calculateEstimatedTime() {
   const now = new Date();
   const speed = 50; // assumed average speed in km/h
-  const distance = journeySettings.initialDistance;
+  const distance = alarmSettings.initialDistance;
   const timeInHours = distance / (speed * 1000); // convert distance to km
   const timeInMs = timeInHours * 60 * 60 * 1000;
-
+  
   return {
     start: now,
     end: new Date(now.getTime() + timeInMs)
@@ -120,7 +172,13 @@ function formatTime(date) {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  if (event.action === 'view') {
-    event.waitUntil(clients.openWindow('/'));
+  if (event.action === 'open') {
+    clients.openWindow('/');
+  }
+});
+
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'alarm-sync') {
+    event.waitUntil(checkLocation());
   }
 });
