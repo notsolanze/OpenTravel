@@ -57,11 +57,5 @@
   ],
   "categories": ["travel", "utilities"],
   "lang": "en-US",
-  "dir": "ltr",
-  "iarc_rating_id": "e84b072d-71b3-4d3e-86ae-31a8ce4e53b7",
-  "scope": "/",
-  "id": "opentravel-pwa",
-  "edge_side_panel": {
-    "preferred_width": 400
-  }
+  "dir": "ltr"
 }
