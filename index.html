@@ -33,6 +33,18 @@
         #alertPopup {
             z-index: 1000;
         }
+        @media (prefers-color-scheme: dark) {
+          .notification {
+            background: #1a1a1a;
+            color: white;
+          }
+          .notification-progress {
+            background: rgba(255, 255, 255, 0.1);
+          }
+          .notification-progress-bar {
+            background: #00b14f;
+          }
+        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -411,18 +423,31 @@
 
         // Send initial notification
         function sendInitialNotification(destination) {
-            navigator.geolocation.getCurrentPosition(
-                position => {
-                    const distance = calculateDistance(position.coords, {latitude: destination[0], longitude: destination[1]});
-                    const progress = calculateProgress(distance);
-                    const formattedDistance = formatDistance(distance);
-                    showProgressNotification('OpenTravel Monitoring Started', `Initial distance: ${formattedDistance}`, progress);
-                },
-                error => {
-                    console.error('Error getting initial location:', error);
-                    showNotification('OpenTravel Monitoring Started', 'Unable to get initial distance. Monitoring started.');
-                }
-            );
+          navigator.geolocation.getCurrentPosition(
+            position => {
+              const distance = calculateDistance(
+                position.coords, 
+                {latitude: destination[0], longitude: destination[1]}
+              );
+              if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.ready.then(registration => {
+                  registration.active.postMessage({
+                    type: 'START_BACKGROUND_UPDATES',
+                    settings: {
+                      destination: destination,
+                      radius: alarmRadius,
+                      initialDistance: distance,
+                      updateInterval: settings.updateInterval
+                    }
+                  });
+                });
+              }
+            },
+            error => {
+              console.error('Error getting initial location:', error);
+              showAlert('Unable to get initial location. Monitoring started anyway.', 'info');
+            }
+          );
         }
 
         // Calculate distance between two points
