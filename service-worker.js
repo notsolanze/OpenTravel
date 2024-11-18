@@ -2,26 +2,29 @@ const CACHE_NAME = 'opentravel-cache-v1';
 const urlsToCache = [
   '/',
   '/index.html',
+  '/manifest.json',
   'https://cdn.tailwindcss.com',
   'https://unpkg.com/leaflet@1.7.1/dist/leaflet.css',
   'https://unpkg.com/leaflet@1.7.1/dist/leaflet.js',
   'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap',
   'https://unpkg.com/lucide@latest',
   'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-  'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'
+  'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3',
+  'https://assets.mixkit.co/active_storage/sfx/2569/2569-preview.mp3',
+  'https://assets.mixkit.co/active_storage/sfx/2570/2570-preview.mp3',
+  'https://assets.mixkit.co/active_storage/sfx/2908/2908-preview.mp3',
+  'https://assets.mixkit.co/active_storage/sfx/2910/2910-preview.mp3',
+  'https://assets.mixkit.co/active_storage/sfx/2573/2573-preview.mp3',
+  'https://assets.mixkit.co/active_storage/sfx/2574/2574-preview.mp3',
+  'https://assets.mixkit.co/active_storage/sfx/2575/2575-preview.mp3'
 ];
+
+let alarmSettings = null;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => cache.addAll(urlsToCache))
-  );
-});
-
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => response || fetch(event.request))
   );
 });
 
@@ -39,12 +42,39 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-let alarmSettings = null;
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    caches.match(event.request)
+      .then((response) => {
+        if (response) {
+          return response;
+        }
+        return fetch(event.request).then(
+          (response) => {
+            if(!response || response.status !== 200 || response.type !== 'basic') {
+              return response;
+            }
+
+            const responseToCache = response.clone();
+
+            caches.open(CACHE_NAME)
+              .then((cache) => {
+                cache.put(event.request, responseToCache);
+              });
+
+            return response;
+          }
+        );
+      })
+  );
+});
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'START_BACKGROUND_UPDATES') {
     alarmSettings = event.data.settings;
     startBackgroundUpdates();
+  } else if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
   }
 });
 
@@ -113,13 +143,32 @@ function formatDistance(meters) {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  if (event.action === 'open') {
-    clients.openWindow('/');
-  }
+  event.waitUntil(
+    clients.openWindow('https://open-travel-psi.vercel.app/')
+  );
 });
 
 self.addEventListener('sync', (event) => {
   if (event.tag === 'alarm-sync') {
     event.waitUntil(checkLocation());
+  }
+});
+
+self.addEventListener('push', (event) => {
+  if (event.data) {
+    const data = event.data.json();
+    const title = data.title || 'OpenTravel Update';
+    const options = {
+      body: data.body || 'New update from OpenTravel',
+      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+      badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+      vibrate: [200, 100, 200],
+      data: {
+        dateOfArrival: Date.now(),
+        primaryKey: '2'
+      }
+    };
+
+    event.waitUntil(self.registration.showNotification(title, options));
   }
 });
