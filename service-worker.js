@@ -52,7 +52,7 @@ function startBackgroundUpdates() {
   if (alarmSettings) {
     setInterval(() => {
       checkLocation();
-    }, alarmSettings.updateInterval * 60 * 1000); // Convert minutes to milliseconds
+    }, alarmSettings.updateInterval * 1000); // Convert seconds to milliseconds
   }
 }
 
@@ -60,7 +60,8 @@ async function checkLocation() {
   try {
     const position = await getCurrentPosition();
     const distance = calculateDistance(position.coords, {latitude: alarmSettings.destination[0], longitude: alarmSettings.destination[1]});
-    sendDistanceNotification(distance);
+    const progress = calculateProgress(distance);
+    sendProgressNotification(distance, progress);
   } catch (error) {
     console.error('Error checking location:', error);
   }
@@ -91,15 +92,27 @@ function calculateDistance(point1, point2) {
   return R * c; // Distance in meters
 }
 
-function sendDistanceNotification(distance) {
+function calculateProgress(currentDistance) {
+  const totalDistance = alarmSettings.initialDistance || currentDistance;
+  return Math.max(0, Math.min(100, ((totalDistance - currentDistance) / totalDistance) * 100));
+}
+
+function sendProgressNotification(distance, progress) {
   const formattedDistance = formatDistance(distance);
-  const title = 'OpenTravel Distance Update';
+  const title = 'OpenTravel Progress';
   const options = {
-    body: `Current distance to destination: ${formattedDistance}`,
+    body: `Current distance: ${formattedDistance}`,
     icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
     badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    tag: 'distance-update',
-    renotify: true
+    tag: 'opentravel-progress',
+    renotify: true,
+    data: {
+      progress: progress
+    },
+    actions: [
+      { action: 'open', title: 'Open App' },
+      { action: 'dismiss', title: 'Dismiss' }
+    ]
   };
 
   self.registration.showNotification(title, options);
