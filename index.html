@@ -33,10 +33,41 @@
         #alertPopup {
             z-index: 1000;
         }
+        .loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #10B981;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body class="bg-gray-100">
-    <div id="app" class="max-w-md mx-auto bg-white shadow-lg overflow-hidden min-h-screen">
+    <div id="loadingScreen" class="loading-screen">
+        <div class="text-center">
+            <div class="spinner mx-auto mb-4"></div>
+            <p class="text-lg font-semibold text-gray-700">Loading OpenTravel...</p>
+        </div>
+    </div>
+
+    <div id="app" class="max-w-md mx-auto bg-white shadow-lg overflow-hidden min-h-screen hidden">
         <div class="bg-green-500 text-white p-4 flex justify-between items-center">
             <h1 class="text-2xl font-bold">OpenTravel</h1>
             <button id="settingsBtn" class="p-2 rounded-full hover:bg-green-600 transition duration-300">
@@ -149,6 +180,130 @@
             }).addTo(map);
         }
 
+        // Check and request permissions
+        async function checkAndRequestPermissions() {
+            let geolocationPermission = false;
+            let notificationPermission = false;
+
+            // Check geolocation permission
+            if ('geolocation' in navigator) {
+                try {
+                    await new Promise((resolve, reject) => {
+                        navigator.geolocation.getCurrentPosition(resolve, reject);
+                    });
+                    geolocationPermission = true;
+                } catch (error) {
+                    console.error('Geolocation permission denied:', error);
+                }
+            }
+
+            // Check notification permission
+            if ('Notification' in window) {
+                if (Notification.permission === 'granted') {
+                    notificationPermission = true;
+                } else if (Notification.permission !== 'denied') {
+                    const permission = await Notification.requestPermission();
+                    notificationPermission = permission === 'granted';
+                }
+            }
+
+            return { geolocationPermission, notificationPermission };
+        }
+
+        // Set alarm
+        async function setAlarm() {
+            const { geolocationPermission, notificationPermission } = await checkAndRequestPermissions();
+
+            if (!geolocationPermission) {
+                showAlert('Geolocation permission is required to set the alarm. Please enable it in your browser settings.', 'error');
+                return;
+            }
+
+            if (!notificationPermission && settings.enableNotifications) {
+                showAlert('Notification permission is recommended for better experience. You can enable it in your browser settings.', 'info');
+            }
+
+            const destinationInput = document.getElementById('destination').value;
+            alarmRadius = parseInt(document.getElementById('radius').value);
+
+            if (!destinationInput) {
+                showAlert('Please enter a destination', 'error');
+                return;
+            }
+
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destinationInput)}, Philippines`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        destination = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                        
+                        if (destinationMarker) map.removeLayer(destinationMarker);
+                        if (circle) map.removeLayer(circle);
+                        
+                        destinationMarker = L.marker(destination, {
+                            icon: L.divIcon({
+                                className: 'bg-green-500 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center',
+                                html: '<span class="text-white text-xs">📍</span>',
+                                iconSize: [24, 24]
+                            })
+                        }).addTo(map);
+                        
+                        circle = L.circle(destination, { 
+                            radius: alarmRadius,
+                            color: 'green',
+                            fillColor: '#3ce03c',
+                            fillOpacity: 0.2
+                        }).addTo(map);
+                        
+                        map.fitBounds(circle.getBounds());
+
+                        if (watchId) {
+                            navigator.geolocation.clearWatch(watchId);
+                        }
+
+                        watchId = navigator.geolocation.watchPosition(updateLocation, 
+                            error => {
+                                console.error('Error getting location:', error);
+                                showAlert('Unable to get your location. Please check your settings and try again.', 'error');
+                            },
+                            {
+                                enableHighAccuracy: true,
+                                maximumAge: 0,
+                                timeout: 5000
+                            }
+                        );
+
+                        document.getElementById('status').textContent = 'Alarm set. Monitoring location...';
+                        document.getElementById('status').classList.remove('text-green-600', 'font-semibold');
+
+                        // Save alarm settings
+                        settings.destination = destinationInput;
+                        settings.radius = alarmRadius;
+                        sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
+                        isAlarmActive = true;
+
+                        // Register for background sync
+                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                            navigator.serviceWorker.ready.then(function(reg) {
+                                return reg.sync.register('alarm-sync');
+                            }).catch(function(err) {
+                                console.log('Background sync failed:', err);
+                            });
+                        }
+
+                        // Start background updates and send initial notification
+                        startBackgroundUpdates();
+                        sendInitialNotification(destination);
+                    } else {
+                        showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error geocoding destination:', error);
+                    showAlert('Error finding destination. Please try again.', 'error');
+                });
+        }
+
         // Play alarm
         function playAlarm() {
             if (!isAlarmPlaying) {
@@ -240,109 +395,15 @@
             return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
         }
 
-        // Set alarm
-        function setAlarm() {
-            const destinationInput = document.getElementById('destination').value;
-            alarmRadius = parseInt(document.getElementById('radius').value);
-
-            if (!destinationInput) {
-                showAlert('Please enter a destination', 'error');
-                return;
-            }
-
-            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destinationInput)}, Philippines`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.length > 0) {
-                        destination = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-                        
-                        if (destinationMarker) map.removeLayer(destinationMarker);
-                        if (circle) map.removeLayer(circle);
-                        
-                        destinationMarker = L.marker(destination, {
-                            icon: L.divIcon({
-                                className: 'bg-green-500 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center',
-                                html: '<span class="text-white text-xs">📍</span>',
-                                iconSize: [24, 24]
-                            })
-                        }).addTo(map);
-                        
-                        circle = L.circle(destination, { 
-                            radius: alarmRadius,
-                            color: 'green',
-                            fillColor: '#3ce03c',
-                            fillOpacity: 0.2
-                        }).addTo(map);
-                        
-                        map.fitBounds(circle.getBounds());
-
-                        if (watchId) {
-                            navigator.geolocation.clearWatch(watchId);
-                        }
-
-                        watchId = navigator.geolocation.watchPosition(updateLocation, 
-                            error => {
-                                console.error('Error getting location:', error);
-                                showAlert('Unable to get your location. Please check your settings and try again.', 'error');
-                            },
-                            {
-                                enableHighAccuracy: true,
-                                maximumAge: 0,
-                                timeout: 5000
-                            }
-                        );
-
-                        document.getElementById('status').textContent = 'Alarm set. Monitoring location...';
-                        document.getElementById('status').classList.remove('text-green-600', 'font-semibold');
-
-                        // Save alarm settings
-                        settings.destination = destinationInput;
-                        settings.radius = alarmRadius;
-                        sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
-                        isAlarmActive = true;
-
-                        // Register for background sync
-                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
-                            navigator.serviceWorker.ready.then(function(reg) {
-                                return reg.sync.register('alarm-sync');
-                            }).catch(function(err) {
-                                console.log('Background sync failed:', err);
-                            });
-                        }
-
-                        // Start background updates and send initial notification
-                        startBackgroundUpdates();
-                        sendInitialNotification(destination);
-                    } else {
-                        showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error geocoding destination:', error);
-                    showAlert('Error finding destination. Please try again.', 'error');
-                });
-        }
-
         // Show notification
         function showNotification(title, body) {
-            if ("Notification" in window) {
-                if (Notification.permission === "granted") {
-                    sendNotification(title, body);
-                } else if (Notification.permission !== "denied") {
-                    Notification.requestPermission().then(permission => {
-                        if (permission === "granted") {
-                            sendNotification(title, body);
-                        }
-                    });
-                }
-            }
-
-            // For iOS Safari when in standalone mode (PWA)
-            if (window.navigator.standalone) {
-                // Use local notification
-                if ("Notification" in window) {
-                    new Notification(title, { body: body });
-                }
+            if ("Notification" in window && Notification.permission === "granted") {
+                sendNotification(title, body);
+            } else if (window.navigator.standalone) {
+                // For iOS Safari when in standalone mode (PWA)
+                new Notification(title, { body: body });
+            } else {
+                showAlert(body, 'info');
             }
         }
 
@@ -438,7 +499,7 @@
         }
 
         // Initialize the app
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             initMap();
             document.getElementById('setAlarm').addEventListener('click', setAlarm);
             document.getElementById('stopAlarm').addEventListener('click', stopAlarm);
@@ -515,27 +576,35 @@
             }
             updateAlarmSound();
 
-            // Get initial user location
-            navigator.geolocation.getCurrentPosition(
-                updateLocation,
-                error => {
-                    console.error('Error getting initial location:', error);
-                    showAlert('Unable to get your initial location. Please check your settings and try again.', 'error');
-                },
-                {
-                    enableHighAccuracy: true,
-                    maximumAge: 0,
-                    timeout: 5000
-                }
-            );
+            // Check initial permissions
+            const { geolocationPermission, notificationPermission } = await checkAndRequestPermissions();
+
+            if (!geolocationPermission) {
+                showAlert('Geolocation permission is required for this app to function properly. Please enable it in your browser settings.', 'error');
+            }
+
+            if (!notificationPermission && settings.enableNotifications) {
+                showAlert('Notifications are disabled. Enable them in your browser settings for a better experience.', 'info');
+            }
+
+            // Get initial user location if permission is granted
+            if (geolocationPermission) {
+                navigator.geolocation.getCurrentPosition(
+                    updateLocation,
+                    error => {
+                        console.error('Error getting initial location:', error);
+                        showAlert('Unable to get your initial location. Please check your settings and try again.', 'error');
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        maximumAge: 0,
+                        timeout: 5000
+                    }
+                );
+            }
 
             // Initialize Lucide icons
             lucide.createIcons();
-
-            // Request notification permission if enabled
-            if (settings.enableNotifications) {
-                Notification.requestPermission();
-            }
 
             // Register service worker
             if ('serviceWorker' in navigator) {
@@ -554,6 +623,10 @@
                     updateLocation(event.data.position);
                 }
             });
+
+            // Hide loading screen and show app
+            document.getElementById('loadingScreen').style.display = 'none';
+            document.getElementById('app').classList.remove('hidden');
         });
 
         function updateAlarmSound() {
