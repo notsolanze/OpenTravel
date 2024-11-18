@@ -124,9 +124,3 @@ self.addEventListener('notificationclick', (event) => {
     event.waitUntil(clients.openWindow('/'));
   }
 });
-
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'alarm-sync') {
-    event.waitUntil(checkLocation());
-  }
-});
