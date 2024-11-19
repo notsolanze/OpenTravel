@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,6 +9,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/128/10473/10473293.png">
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/localforage@1.10.0/dist/localforage.min.js"></script>
+    <script src="https://unpkg.com/leaflet.offline@2.2.0/dist/leaflet.offline.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="manifest" href="/manifest.json">
@@ -134,6 +137,18 @@
                 <label for="updateInterval" class="block text-sm font-medium text-gray-700 mb-1">Background Update Interval (minutes)</label>
                 <input type="number" id="updateInterval" class="w-full p-3 border border-gray-300 rounded-full focus:ring-green-500 focus:border-green-500" value="5" min="1" max="60">
             </div>
+            <div class="mb-4">
+                <label class="flex items-center">
+                    <input type="checkbox" id="enableOfflineMaps" class="form-checkbox h-5 w-5 text-green-600">
+                    <span class="ml-2 text-sm text-gray-700">Enable Offline Maps</span>
+                </label>
+            </div>
+            <div id="offlineMapControls" class="mb-4 hidden">
+                <button id="downloadOfflineMap" class="w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 transition duration-300 mb-2">
+                    Download Offline Map
+                </button>
+                <p id="offlineMapStatus" class="text-sm text-gray-600"></p>
+            </div>
             <button id="saveSettings" class="w-full bg-green-500 text-white p-3 rounded-lg hover:bg-green-600 transition duration-300">
                 Save Settings
             </button>
@@ -157,27 +172,50 @@
         </div>
     </div>
 
+    <div id="iosInstructions" class="hidden p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700">
+        <h3 class="font-bold">For the best experience on iOS:</h3>
+        <ol class="list-decimal list-inside mt-2">
+            <li>Tap the share button at the bottom of the browser</li>
+            <li>Scroll down and select "Add to Home Screen"</li>
+            <li>Tap "Add" in the top right corner</li>
+            <li>Open the app from your home screen</li>
+        </ol>
+    </div>
+
     <script>
         let map, userMarker, destinationMarker, circle;
         let watchId, destination, alarmRadius;
         let isAlarmPlaying = false;
         let isAlarmActive = false;
         let backgroundInterval;
+        let notificationCheckInterval;
+        let offlineLayer;
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
             alarmSound: 'default',
             volume: 0.5,
             enableNotifications: true,
-            updateInterval: 5
+            updateInterval: 5,
+            enableOfflineMaps: false
         };
         
         // Initialize map
-        function initMap() {
+        async function initMap() {
+            const tileLayerUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+            const tileLayerOptions = {
+                attribution: '© OpenTravel',
+                maxZoom: 18
+            };
+
+            if (settings.enableOfflineMaps) {
+                offlineLayer = L.tileLayer.offline(tileLayerUrl, tileLayerOptions);
+                await offlineLayer.addTo(map);
+            } else {
+                L.tileLayer(tileLayerUrl, tileLayerOptions).addTo(map);
+            }
+
             map = L.map('map').setView([14.5995, 120.9842], 11); // Manila coordinates
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenTravel'
-            }).addTo(map);
         }
 
         // Check and request permissions
@@ -231,8 +269,8 @@
                 return;
             }
 
-            if (isMobileDevice()) {
-                showAlert('On mobile devices, notifications may not work when the app is in the background. Keep the app open for best results.', 'info');
+            if (isIOS()) {
+                showAlert('On iOS, keep the app open or add it to your home screen for the best experience. Notifications may not work when the app is in the background.', 'info');
             }
 
             fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destinationInput)}, Philippines`)
@@ -286,15 +324,6 @@
                         sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
                         isAlarmActive = true;
 
-                        // Register for background sync
-                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
-                            navigator.serviceWorker.ready.then(function(reg) {
-                                return reg.sync.register('alarm-sync');
-                            }).catch(function(err) {
-                                console.log('Background sync failed:', err);
-                            });
-                        }
-
                         // Start background updates and send initial notification
                         startBackgroundUpdates();
                         sendInitialNotification(destination);
@@ -341,13 +370,6 @@
             document.getElementById('setAlarm').classList.remove('hidden');
             showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
             
-            // Stop background sync
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.ready.then(registration => {
-                    registration.sync.unregister('alarm-sync');
-                });
-            }
-
             // Clear background interval
             if (backgroundInterval) {
                 clearInterval(backgroundInterval);
@@ -402,8 +424,17 @@
         // Show notification
         function showNotification(title, body) {
             if ("Notification" in window && Notification.permission === "granted") {
-                if (navigator.userAgent.match(/Android/i)) {
-                    // For Android, use service worker to show notification
+                if (isIOS()) {
+                    // iOS-specific handling
+                    if (window.navigator.standalone) {
+                        // App is in standalone mode (added to home screen)
+                        showAlert(`${title}: ${body}`, 'info');
+                    } else {
+                        // Fallback for Safari
+                        alert(`${title}: ${body}`);
+                    }
+                } else if (isAndroid()) {
+                    // Android-specific handling
                     if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
                         navigator.serviceWorker.ready.then(registration => {
                             registration.showNotification(title, {
@@ -412,16 +443,16 @@
                                 vibrate: [200, 100, 200]
                             });
                         });
+                    } else {
+                        new Notification(title, { body: body });
                     }
                 } else {
-                    // For other platforms, use regular Notification
+                    // Desktop or other platforms
                     new Notification(title, { body: body });
                 }
-            } else if (window.navigator.standalone) {
-                // For iOS when in standalone mode (PWA)
-                alert(`${title}: ${body}`);
             } else {
-                showAlert(body, 'info');
+                // Fallback if notifications are not supported or permitted
+                showAlert(`${title}: ${body}`, 'info');
             }
         }
 
@@ -436,7 +467,7 @@
 
             backgroundInterval = setInterval(() => {
                 const now = Date.now();
-                if (document.hidden && now - lastUpdateTime >= minInterval) {
+                if ((document.hidden || isIOS()) && now - lastUpdateTime >= minInterval) {
                     checkLocationAndNotify();
                     lastUpdateTime = now;
                 }
@@ -444,7 +475,7 @@
 
             // Listen for visibility changes
             document.addEventListener("visibilitychange", function() {
-                if (!document.hidden) {
+                if (!document.hidden || isIOS()) {
                     checkLocationAndNotify();
                     lastUpdateTime = Date.now();
                 }
@@ -505,7 +536,7 @@
 
         // Initialize the app
         document.addEventListener('DOMContentLoaded', async () => {
-            initMap();
+            await initMap();
             document.getElementById('setAlarm').addEventListener('click', setAlarm);
             document.getElementById('stopAlarm').addEventListener('click', stopAlarm);
 
@@ -516,6 +547,8 @@
                 document.getElementById('volume').value = settings.volume;
                 document.getElementById('enableNotifications').checked = settings.enableNotifications;
                 document.getElementById('updateInterval').value = settings.updateInterval;
+                document.getElementById('enableOfflineMaps').checked = settings.enableOfflineMaps;
+                document.getElementById('offlineMapControls').style.display = settings.enableOfflineMaps ? 'block' : 'none';
             });
 
             document.getElementById('saveSettings').addEventListener('click', () => {
@@ -523,16 +556,19 @@
                 const newVolume = parseFloat(document.getElementById('volume').value);
                 const newEnableNotifications = document.getElementById('enableNotifications').checked;
                 const newUpdateInterval = parseInt(document.getElementById('updateInterval').value);
+                const newEnableOfflineMaps = document.getElementById('enableOfflineMaps').checked;
                 
                 if (newAlarmSound !== settings.alarmSound || 
                     newVolume !== settings.volume || 
                     newEnableNotifications !== settings.enableNotifications ||
-                    newUpdateInterval !== settings.updateInterval) {
+                    newUpdateInterval !== settings.updateInterval ||
+                    newEnableOfflineMaps !== settings.enableOfflineMaps) {
                     
                     settings.alarmSound = newAlarmSound;
                     settings.volume = newVolume;
                     settings.enableNotifications = newEnableNotifications;
                     settings.updateInterval = newUpdateInterval;
+                    settings.enableOfflineMaps = newEnableOfflineMaps;
                     
                     sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
                     updateAlarmSound();
@@ -544,6 +580,11 @@
                     // Update background updates interval
                     if (isAlarmActive) {
                         startBackgroundUpdates();
+                    }
+
+                    // Update offline map settings
+                    if (newEnableOfflineMaps !== settings.enableOfflineMaps) {
+                        location.reload(); // Reload the page to apply offline map changes
                     }
                 }
                 showAlert('Settings saved successfully!', 'success');
@@ -560,16 +601,44 @@
                     alarmSound: 'default', 
                     volume: 0.5, 
                     enableNotifications: true,
-                    updateInterval: 5
+                    updateInterval: 5,
+                    enableOfflineMaps: false
                 };
                 document.getElementById('alarmSound').value = 'default';
                 document.getElementById('volume').value = '0.5';
                 document.getElementById('enableNotifications').checked = true;
                 document.getElementById('updateInterval').value = '5';
+                document.getElementById('enableOfflineMaps').checked = false;
                 document.getElementById('destination').value = '';
                 document.getElementById('radius').value = '1000';
                 updateAlarmSound();
                 showAlert('Session reset successfully!', 'success');
+            });
+
+            document.getElementById('enableOfflineMaps').addEventListener('change', (e) => {
+                document.getElementById('offlineMapControls').style.display = e.target.checked ? 'block' : 'none';
+            });
+
+            document.getElementById('downloadOfflineMap').addEventListener('click', async () => {
+                if (!offlineLayer) {
+                    showAlert('Offline maps are not enabled. Please enable them in settings first.', 'error');
+                    return;
+                }
+
+                const bounds = map.getBounds();
+                const zoom = map.getZoom();
+                const statusElement = document.getElementById('offlineMapStatus');
+
+                statusElement.textContent = 'Downloading offline map...';
+                try {
+                    await offlineLayer.saveTiles(bounds, zoom, zoom + 2, (progress) => {
+                        statusElement.textContent = `Downloading: ${Math.round(progress.percentage)}%`;
+                    });
+                    statusElement.textContent = 'Offline map downloaded successfully!';
+                } catch (error) {
+                    console.error('Error downloading offline map:', error);
+                    statusElement.textContent = 'Error downloading offline map. Please try again.';
+                }
             });
 
             // Load saved settings
@@ -632,6 +701,16 @@
             // Hide loading screen and show app
             document.getElementById('loadingScreen').style.display = 'none';
             document.getElementById('app').classList.remove('hidden');
+
+            // Show iOS instructions if applicable
+            if (isIOS()) {
+                document.getElementById('iosInstructions').classList.remove('hidden');
+            }
+
+            // Start notification polling for iOS
+            if (isIOS()) {
+                startNotificationPolling();
+            }
         });
 
         function updateAlarmSound() {
@@ -710,8 +789,40 @@
             document.getElementById('alertIcon').classList.remove('bg-green-100', 'bg-red-100', 'bg-blue-100');
         }
 
-        function isMobileDevice() {
-            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        function isIOS() {
+            return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        }
+
+        function isAndroid() {
+            return /Android/i.test(navigator.userAgent);
+        }
+
+        function startNotificationPolling() {
+            if (notificationCheckInterval) {
+                clearInterval(notificationCheckInterval);
+            }
+            
+            notificationCheckInterval = setInterval(() => {
+                checkForNotifications();
+            }, 60000); // Check every minute
+        }
+
+        async function checkForNotifications() {
+            try {
+                const response = await fetch('/api/check-notifications');
+                const data = await response.json();
+                
+                if (data.hasNotification) {
+                    showNotification(data.title, data.message);
+                }
+            } catch (error) {
+                console.error('Error checking for notifications:', error);
+            }
+        }
+
+        // Request notification permission
+        if ("Notification" in window) {
+            Notification.requestPermission();
         }
     </script>
 </body>
