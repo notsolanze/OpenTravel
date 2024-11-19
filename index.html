@@ -298,13 +298,14 @@
 
                         // Save alarm settings
                         settings.destination = destinationInput;
-                settings.radius = alarmRadius;
+                        settings.radius = alarmRadius;
                         sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
                         isAlarmActive = true;
 
                         // Start journey in service worker
                         if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
                             navigator.serviceWorker.ready.then(registration => {
+                                console.log('Sending START_JOURNEY message to service worker');
                                 registration.active.postMessage({
                                     type: 'START_JOURNEY',
                                     settings: {
@@ -315,6 +316,8 @@
                                     }
                                 });
                             });
+                        } else {
+                            console.error('Service worker not ready or not supported');
                         }
 
                         // Register for background sync
@@ -366,11 +369,40 @@
             return R * c; // Distance in meters
         }
 
+        function checkNotificationSupport() {
+            if (!("Notification" in window)) {
+                console.error("This browser does not support desktop notification");
+                return false;
+            }
+
+            if (Notification.permission === "granted") {
+                return true;
+            }
+
+            if (Notification.permission !== "denied") {
+                Notification.requestPermission().then(function (permission) {
+                    if (permission === "granted") {
+                        console.log("Notification permission granted");
+                        return true;
+                    }
+                });
+            }
+
+            return false;
+        }
+
         // Initialize the app
         document.addEventListener('DOMContentLoaded', () => {
             initMap();
             document.getElementById('setAlarm').addEventListener('click', setAlarm);
             document.getElementById('stopAlarm').addEventListener('click', stopAlarm);
+
+            // Check notification support
+            if (checkNotificationSupport()) {
+                console.log("Notifications are supported and permitted");
+            } else {
+                console.warn("Notifications are not supported or not permitted");
+            }
 
             document.getElementById('settingsBtn').addEventListener('click', () => {
                 document.getElementById('mainPage').classList.add('hidden');
