@@ -44,6 +44,7 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('message', (event) => {
+  console.log('Service worker received message:', event.data);
   if (event.data && event.data.type === 'START_JOURNEY') {
     // Reset flags when starting new journey
     hasStarted = false;
@@ -55,6 +56,8 @@ self.addEventListener('message', (event) => {
 
 function startJourney() {
   if (!alarmSettings || hasStarted) return;
+  
+  console.log('Starting journey:', alarmSettings);
   
   // Send only the initial notification
   const estimatedTime = calculateEstimatedTime();
@@ -114,6 +117,8 @@ function calculateDistance(point1, point2) {
 }
 
 function showNotification(type, estimatedArrival = null) {
+  console.log('Attempting to show notification:', type);
+  
   // Close any existing notifications first
   self.registration.getNotifications().then(notifications => {
     notifications.forEach(notification => notification.close());
@@ -130,7 +135,7 @@ function showNotification(type, estimatedArrival = null) {
       tag: 'opentravel-journey', // Use same tag to prevent duplicates
       renotify: false,
       requireInteraction: true,
-      silent: true
+      silent: false
     };
   } else {
     title = 'Destination Reached';
@@ -144,7 +149,9 @@ function showNotification(type, estimatedArrival = null) {
     };
   }
 
-  self.registration.showNotification(title, options);
+  self.registration.showNotification(title, options)
+    .then(() => console.log('Notification shown successfully'))
+    .catch(error => console.error('Error showing notification:', error));
 }
 
 function calculateEstimatedTime() {
