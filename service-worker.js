@@ -40,12 +40,13 @@ self.addEventListener('activate', (event) => {
 });
 
 let alarmSettings = null;
-let notificationId = null;
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'START_JOURNEY') {
     alarmSettings = event.data.settings;
     startJourney();
+  } else if (event.data && event.data.type === 'UPDATE_NOTIFICATION') {
+    updateNotificationWithProgress(event.data.title, event.data.body, event.data.progress);
   }
 });
 
@@ -67,7 +68,7 @@ async function checkLocation() {
       {latitude: alarmSettings.destination[0], longitude: alarmSettings.destination[1]}
     );
     const progress = calculateProgress(distance);
-    updateNotificationProgress(progress);
+    updateNotificationWithProgress('OpenTravel Progress', `Distance: ${formatDistance(distance)}`, progress);
     
     if (distance <= alarmSettings.radius) {
       sendStatusNotification('end');
@@ -121,7 +122,7 @@ function sendStatusNotification(type, estimatedTime) {
   };
 
   if (type === 'start') {
-    options.body = `Arrival by ${formatTime(estimatedTime.end)}`;
+    options.body = `Journey started. Estimated arrival by ${formatTime(estimatedTime.end)}`;
     options.data = { type: 'start', progress: 0 };
   } else if (type === 'end') {
     options.body = 'You have reached your destination!';
@@ -129,24 +130,27 @@ function sendStatusNotification(type, estimatedTime) {
     options.vibrate = [200, 100, 200];
   }
 
-  self.registration.showNotification(title, options).then((notification) => {
-    notificationId = notification.tag;
-  });
+  self.registration.showNotification(title, options);
 }
 
-function updateNotificationProgress(progress) {
-  if (notificationId) {
-    self.registration.getNotifications({ tag: notificationId }).then((notifications) => {
-      if (notifications.length > 0) {
-        const notification = notifications[0];
-        const updatedOptions = {
-          ...notification.options,
-          data: { ...notification.data, progress: progress }
-        };
-        self.registration.showNotification(notification.title, updatedOptions);
+function updateNotificationWithProgress(title, body, progress) {
+  self.registration.getNotifications({tag: 'opentravel-progress'}).then(function(notifications) {
+    if (notifications && notifications.length > 0) {
+      notifications.forEach(function(notification) {
+        notification.close();
+      });
+    }
+    return self.registration.showNotification(title, {
+      body: body,
+      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+      badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+      tag: 'opentravel-progress',
+      renotify: true,
+      data: {
+        progress: progress
       }
     });
-  }
+  });
 }
 
 function calculateEstimatedTime() {
@@ -168,6 +172,12 @@ function formatTime(date) {
     minute: '2-digit',
     hour12: true 
   });
+}
+
+function formatDistance(meters) {
+  return meters > 1000 
+    ? `${(meters/1000).toFixed(1)} km` 
+    : `${Math.round(meters)} m`;
 }
 
 self.addEventListener('notificationclick', (event) => {
