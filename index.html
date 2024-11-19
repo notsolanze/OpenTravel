@@ -298,7 +298,7 @@
 
                         // Save alarm settings
                         settings.destination = destinationInput;
-                        settings.radius = alarmRadius;
+                settings.radius = alarmRadius;
                         sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
                         isAlarmActive = true;
 
@@ -340,7 +340,6 @@
 
         // Show notification
         function showNotification(title, body) {
-            console.log('Attempting to show notification:', title, body);
             if ("Notification" in window) {
                 if (Notification.permission === "granted") {
                     new Notification(title, { body: body });
@@ -351,8 +350,6 @@
                         }
                     });
                 }
-            } else {
-                console.warn('Notifications are not supported in this browser');
             }
         }
 
@@ -372,36 +369,9 @@
             return R * c; // Distance in meters
         }
 
-        function checkNotificationSupport() {
-            if (!("Notification" in window)) {
-                console.error("This browser does not support desktop notification");
-                return false;
-            }
-
-            if (Notification.permission === "granted") {
-                return true;
-            }
-
-            if (Notification.permission !== "denied") {
-                Notification.requestPermission().then(function (permission) {
-                    if (permission === "granted") {
-                        console.log("Notification permission granted");
-                        return true;
-                    }
-                });
-            }
-
-            return false;
-        }
-
         // Initialize the app
         document.addEventListener('DOMContentLoaded', () => {
             initMap();
-            if (checkNotificationSupport()) {
-                console.log("Notifications are supported and permitted");
-            } else {
-                console.warn("Notifications are not supported or not permitted");
-            }
             document.getElementById('setAlarm').addEventListener('click', setAlarm);
             document.getElementById('stopAlarm').addEventListener('click', stopAlarm);
 
@@ -507,8 +477,8 @@
 
             // Listen for messages from the service worker
             navigator.serviceWorker.addEventListener('message', (event) => {
-                if (event.data && event.data.type === 'LOCATION_UPDATE') {
-                    updateLocation(event.data.position);
+                if (event.data && event.data.type === 'DESTINATION_REACHED') {
+                    playAlarm();
                 }
             });
         });
