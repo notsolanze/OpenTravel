@@ -35,40 +35,11 @@
         #alertPopup {
             z-index: 1000;
         }
-        .loading-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 255, 255, 0.9);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-        }
-        .spinner {
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #10B981;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+      
     </style>
 </head>
 <body class="bg-gray-100">
-    <div id="loadingScreen" class="loading-screen">
-        <div class="text-center">
-            <div class="spinner mx-auto mb-4"></div>
-            <p class="text-lg font-semibold text-gray-700">Loading OpenTravel...</p>
-        </div>
-    </div>
-
+   
     <div id="app" class="max-w-md mx-auto bg-white shadow-lg overflow-hidden min-h-screen hidden">
         <div class="bg-green-500 text-white p-4 flex justify-between items-center">
             <h1 class="text-2xl font-bold">OpenTravel</h1>
