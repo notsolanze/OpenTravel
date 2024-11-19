@@ -143,7 +143,6 @@
         let watchId, destination, alarmRadius;
         let isAlarmPlaying = false;
         let isAlarmActive = false;
-        let backgroundInterval;
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
@@ -200,11 +199,6 @@
                     registration.sync.unregister('alarm-sync');
                 });
             }
-
-            // Clear background interval
-            if (backgroundInterval) {
-                clearInterval(backgroundInterval);
-            }
         }
 
         // Update user location
@@ -226,8 +220,7 @@
 
             if (destination && isAlarmActive) {
                 const distance = map.distance([latitude, longitude], destination);
-                const progress = calculateProgress(distance);
-                updateDistanceDisplay(distance, progress);
+                updateDistanceDisplay(distance);
                 
                 if (distance <= alarmRadius && !isAlarmPlaying) {
                     playAlarm();
@@ -237,21 +230,10 @@
             }
         }
 
-        // Calculate progress
-        function calculateProgress(currentDistance) {
-            const totalDistance = map.distance(userMarker.getLatLng(), destination);
-            return Math.max(0, Math.min(100, ((totalDistance - currentDistance) / totalDistance) * 100));
-        }
-
         // Update distance display
-        function updateDistanceDisplay(distance, progress) {
+        function updateDistanceDisplay(distance) {
             const distanceText = `Distance: ${formatNumber(Math.round(distance))} meters`;
             document.getElementById('distance').textContent = distanceText;
-            
-            // Update notification if enabled
-            if (settings.enableNotifications) {
-                showProgressNotification('OpenTravel Progress', distanceText, progress);
-            }
         }
 
         // Format number with commas
@@ -316,9 +298,24 @@
 
                         // Save alarm settings
                         settings.destination = destinationInput;
-                        settings.radius = alarmRadius;
+                settings.radius = alarmRadius;
                         sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
                         isAlarmActive = true;
+
+                        // Start journey in service worker
+                        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                            navigator.serviceWorker.ready.then(registration => {
+                                registration.active.postMessage({
+                                    type: 'START_JOURNEY',
+                                    settings: {
+                                        destination: destination,
+                                        radius: alarmRadius,
+                                        initialDistance: map.distance(userMarker.getLatLng(), destination),
+                                        updateInterval: settings.updateInterval
+                                    }
+                                });
+                            });
+                        }
 
                         // Register for background sync
                         if ('serviceWorker' in navigator && 'SyncManager' in window) {
@@ -328,10 +325,6 @@
                                 console.log('Background sync failed:', err);
                             });
                         }
-
-                        // Start background updates and send initial notification
-                        startBackgroundUpdates();
-                        sendInitialNotification(destination);
                     } else {
                         showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
                     }
@@ -346,108 +339,15 @@
         function showNotification(title, body) {
             if ("Notification" in window) {
                 if (Notification.permission === "granted") {
-                    sendNotification(title, body);
+                    new Notification(title, { body: body });
                 } else if (Notification.permission !== "denied") {
                     Notification.requestPermission().then(permission => {
                         if (permission === "granted") {
-                            sendNotification(title, body);
+                            new Notification(title, { body: body });
                         }
                     });
                 }
             }
-
-            // For iOS Safari when in standalone mode (PWA)
-            if (window.navigator.standalone) {
-                // Use local notification
-                if ("Notification" in window) {
-                    new Notification(title, { body: body });
-                }
-            }
-        }
-
-        function showProgressNotification(title, body, progress) {
-            const options = {
-                body: body,
-                icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                tag: 'opentravel-update',
-                renotify: true,
-                data: {
-                    progress: progress
-                }
-            };
-
-            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.ready.then(registration => {
-                    registration.showNotification(title, options);
-                });
-            } else {
-                new Notification(title, options);
-            }
-        }
-
-        // Start background updates
-        function startBackgroundUpdates() {
-            if (backgroundInterval) {
-                clearInterval(backgroundInterval);
-            }
-
-            backgroundInterval = setInterval(() => {
-                if (document.hidden) {
-                    checkLocationAndNotify();
-                }
-            }, settings.updateInterval * 1000); // Convert seconds to milliseconds
-
-            // Listen for visibility changes
-            document.addEventListener("visibilitychange", function() {
-                if (document.hidden) {
-                    checkLocationAndNotify();
-                }
-            });
-        }
-
-        // Check location and send notification
-        function checkLocationAndNotify() {
-            navigator.geolocation.getCurrentPosition(
-                position => {
-                    const distance = calculateDistance(position.coords, {latitude: destination[0], longitude: destination[1]});
-                    const progress = calculateProgress(distance);
-                    const formattedDistance = formatDistance(distance);
-                    showProgressNotification('OpenTravel Progress', `Current distance: ${formattedDistance}`, progress);
-                },
-                error => {
-                    console.error('Error getting location:', error);
-                }
-            );
-        }
-
-        // Send initial notification
-        function sendInitialNotification(destination) {
-          navigator.geolocation.getCurrentPosition(
-            position => {
-              const distance = calculateDistance(
-                position.coords, 
-                {latitude: destination[0], longitude: destination[1]}
-              );
-              if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.ready.then(registration => {
-                  registration.active.postMessage({
-                    type: 'START_BACKGROUND_UPDATES',
-                    settings: {
-                      destination: destination,
-                      radius: alarmRadius,
-                      initialDistance: distance,
-                      updateInterval: settings.updateInterval
-                    }
-                  });
-                });
-              }
-            },
-            error => {
-              console.error('Error getting initial location:', error);
-              showAlert('Unable to get initial location. Monitoring started anyway.', 'info');
-            }
-          );
         }
 
         // Calculate distance between two points
@@ -464,13 +364,6 @@
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
             return R * c; // Distance in meters
-        }
-
-        // Format distance
-        function formatDistance(meters) {
-            return meters > 1000 
-                ? `${(meters/1000).toFixed(1)} km` 
-                : `${Math.round(meters)} m`;
         }
 
         // Initialize the app
@@ -509,11 +402,6 @@
                     
                     if (newEnableNotifications && Notification.permission !== "granted") {
                         Notification.requestPermission();
-                    }
-
-                    // Update background updates interval
-                    if (isAlarmActive) {
-                        startBackgroundUpdates();
                     }
                 }
                 showAlert('Settings saved successfully!', 'success');
