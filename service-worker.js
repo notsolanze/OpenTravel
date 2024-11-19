@@ -12,8 +12,8 @@ const urlsToCache = [
 ];
 
 let alarmSettings = null;
-let notificationId = null;
-let hasReachedDestination = false;
+let hasStartNotificationSent = false;
+let hasEndNotificationSent = false;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -46,13 +46,14 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'START_JOURNEY') {
     alarmSettings = event.data.settings;
-    hasReachedDestination = false;
+    hasStartNotificationSent = false;
+    hasEndNotificationSent = false;
     startJourney();
   }
 });
 
 function startJourney() {
-  if (alarmSettings) {
+  if (alarmSettings && !hasStartNotificationSent) {
     const estimatedTime = calculateEstimatedTime();
     // Send initial notification
     sendNotification('start', {
@@ -60,6 +61,7 @@ function startJourney() {
       body: `Estimated arrival by ${formatTime(estimatedTime.end)}`,
       progress: 0
     });
+    hasStartNotificationSent = true;
     
     // Start location checking
     setInterval(() => {
@@ -69,7 +71,7 @@ function startJourney() {
 }
 
 async function checkLocation() {
-  if (hasReachedDestination) return;
+  if (hasEndNotificationSent) return;
 
   try {
     const position = await getCurrentPosition();
@@ -79,13 +81,13 @@ async function checkLocation() {
     );
     
     // Only send notification when near destination
-    if (distance <= alarmSettings.radius && !hasReachedDestination) {
-      hasReachedDestination = true;
+    if (distance <= alarmSettings.radius && !hasEndNotificationSent) {
       sendNotification('end', {
         title: 'Destination Reached',
         body: 'You have arrived at your destination!',
         progress: 100
       });
+      hasEndNotificationSent = true;
       self.registration.unregister();
     }
   } catch (error) {
@@ -142,9 +144,7 @@ function sendNotification(type, { title, body, progress }) {
   const progressBar = '▓'.repeat(filledBlocks) + '░'.repeat(progressBlocks - filledBlocks);
   options.body = `${body}\n${progressBar} ${Math.round(progress)}%`;
 
-  self.registration.showNotification(title, options).then((notification) => {
-    notificationId = notification.tag;
-  });
+  self.registration.showNotification(title, options);
 }
 
 function calculateEstimatedTime() {
