@@ -15,34 +15,7 @@ let alarmSettings = null;
 let hasStarted = false;
 let hasReached = false;
 
-// Define all functions at the top level of the service worker scope
-function calculateEstimatedTime() {
-  console.log('Calculating estimated time');
-  if (!alarmSettings || !alarmSettings.initialDistance) {
-    console.error('alarmSettings or initialDistance is not set');
-    return null;
-  }
-  const now = new Date();
-  const speed = 50; // km/h
-  const distance = alarmSettings.initialDistance / 1000; // Convert meters to kilometers
-  const timeInHours = distance / speed;
-  const timeInMs = timeInHours * 60 * 60 * 1000;
-
-  return {
-    start: now,
-    end: new Date(now.getTime() + timeInMs)
-  };
-}
-
-function formatTime(date) {
-  return date.toLocaleTimeString('en-US', { 
-    hour: 'numeric', 
-    minute: '2-digit',
-    hour12: true 
-  });
-}
-
-function showNotification(type, estimatedArrival = null) {
+function showNotification(type) {
   console.log('Service worker attempting to show notification:', type);
   
   // Close any existing notifications first
@@ -54,11 +27,11 @@ function showNotification(type, estimatedArrival = null) {
 
   if (type === 'start') {
     title = 'Journey Started';
-    body = estimatedArrival ? `Estimated arrival by ${formatTime(estimatedArrival)}` : 'Journey started';
+    body = 'Your trip has begun. Stay safe!';
     options = {
       body,
       icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-      tag: 'opentravel-journey', // Use same tag to prevent duplicates
+      tag: 'opentravel-journey',
       renotify: false,
       requireInteraction: true,
       silent: false
@@ -89,19 +62,14 @@ function startJourney() {
   
   console.log('Starting journey:', alarmSettings);
   
-  // Send only the initial notification
-  const estimatedTime = calculateEstimatedTime();
-  if (estimatedTime) {
-    showNotification('start', estimatedTime.end);
-    hasStarted = true;
+  // Send the start notification
+  showNotification('start');
+  hasStarted = true;
 
-    // Only check location, don't send notifications for updates
-    setInterval(() => {
-      checkLocation();
-    }, alarmSettings.updateInterval * 1000);
-  } else {
-    console.error('Failed to calculate estimated time');
-  }
+  // Start checking location
+  setInterval(() => {
+    checkLocation();
+  }, alarmSettings.updateInterval * 1000);
 }
 
 async function checkLocation() {
