@@ -45,19 +45,6 @@
             background: #00b14f;
           }
         }
-        .notification-progress {
-          width: 100%;
-          height: 4px;
-          background: rgba(0, 0, 0, 0.1);
-          position: absolute;
-          bottom: 0;
-          left: 0;
-        }
-        .notification-progress-bar {
-          height: 100%;
-          background: #10B981;
-          transition: width 0.3s ease-in-out;
-        }
     </style>
 </head>
 <body class="bg-gray-100">
@@ -134,7 +121,7 @@
         </div>
     </div>
     <div id="distance" class="distance-badge text-sm font-semibold text-green-600"></div>
-        <audio id="alarmAudio" loop>
+    <audio id="alarmAudio" loop>
         <source src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3" type="audio/mpeg">
         Your browser does not support the audio element.
     </audio>
@@ -192,9 +179,7 @@
                 }
 
                 // Show notification
-                if (settings.enableNotifications) {
-                    showNotification('OpenTravel Alarm', 'You have reached your destination!');
-                }
+                showNotification('OpenTravel Alarm', 'You have reached your destination!');
             }
         }
 
@@ -265,7 +250,7 @@
             
             // Update notification if enabled
             if (settings.enableNotifications) {
-                updateProgressNotification('OpenTravel Progress', distanceText, progress);
+                showProgressNotification('OpenTravel Progress', distanceText, progress);
             }
         }
 
@@ -359,7 +344,7 @@
 
         // Show notification
         function showNotification(title, body) {
-            if (settings.enableNotifications && "Notification" in window) {
+            if ("Notification" in window) {
                 if (Notification.permission === "granted") {
                     sendNotification(title, body);
                 } else if (Notification.permission !== "denied") {
@@ -372,7 +357,7 @@
             }
 
             // For iOS Safari when in standalone mode (PWA)
-            if (window.navigator.standalone && settings.enableNotifications) {
+            if (window.navigator.standalone) {
                 // Use local notification
                 if ("Notification" in window) {
                     new Notification(title, { body: body });
@@ -380,16 +365,24 @@
             }
         }
 
-        function updateProgressNotification(title, body, progress) {
-            if (settings.enableNotifications && 'serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        function showProgressNotification(title, body, progress) {
+            const options = {
+                body: body,
+                icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                tag: 'opentravel-update',
+                renotify: true,
+                data: {
+                    progress: progress
+                }
+            };
+
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
                 navigator.serviceWorker.ready.then(registration => {
-                    registration.active.postMessage({
-                        type: 'UPDATE_NOTIFICATION',
-                        title: title,
-                        body: body,
-                        progress: progress
-                    });
+                    registration.showNotification(title, options);
                 });
+            } else {
+                new Notification(title, options);
             }
         }
 
@@ -420,9 +413,7 @@
                     const distance = calculateDistance(position.coords, {latitude: destination[0], longitude: destination[1]});
                     const progress = calculateProgress(distance);
                     const formattedDistance = formatDistance(distance);
-                    if (settings.enableNotifications) {
-                        updateProgressNotification('OpenTravel Progress', `Current distance: ${formattedDistance}`, progress);
-                    }
+                    showProgressNotification('OpenTravel Progress', `Current distance: ${formattedDistance}`, progress);
                 },
                 error => {
                     console.error('Error getting location:', error);
@@ -441,7 +432,7 @@
               if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
                 navigator.serviceWorker.ready.then(registration => {
                   registration.active.postMessage({
-                    type: 'START_JOURNEY',
+                    type: 'START_BACKGROUND_UPDATES',
                     settings: {
                       destination: destination,
                       radius: alarmRadius,
