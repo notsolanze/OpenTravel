@@ -143,7 +143,7 @@
         let watchId, destination, alarmRadius;
         let isAlarmPlaying = false;
         let isAlarmActive = false;
-        let serviceWorkerRegistration = null;
+        let backgroundInterval;
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
@@ -195,8 +195,15 @@
             showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
             
             // Stop background sync
-            if (serviceWorkerRegistration) {
-                serviceWorkerRegistration.sync.unregister('alarm-sync');
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.sync.unregister('alarm-sync');
+                });
+            }
+
+            // Clear background interval
+            if (backgroundInterval) {
+                clearInterval(backgroundInterval);
             }
         }
 
@@ -219,7 +226,8 @@
 
             if (destination && isAlarmActive) {
                 const distance = map.distance([latitude, longitude], destination);
-                updateDistanceDisplay(distance);
+                const progress = calculateProgress(distance);
+                updateDistanceDisplay(distance, progress);
                 
                 if (distance <= alarmRadius && !isAlarmPlaying) {
                     playAlarm();
@@ -229,10 +237,21 @@
             }
         }
 
+        // Calculate progress
+        function calculateProgress(currentDistance) {
+            const totalDistance = map.distance(userMarker.getLatLng(), destination);
+            return Math.max(0, Math.min(100, ((totalDistance - currentDistance) / totalDistance) * 100));
+        }
+
         // Update distance display
-        function updateDistanceDisplay(distance) {
+        function updateDistanceDisplay(distance, progress) {
             const distanceText = `Distance: ${formatNumber(Math.round(distance))} meters`;
             document.getElementById('distance').textContent = distanceText;
+            
+            // Update notification if enabled
+            if (settings.enableNotifications) {
+                showProgressNotification('OpenTravel Progress', distanceText, progress);
+            }
         }
 
         // Format number with commas
@@ -297,33 +316,22 @@
 
                         // Save alarm settings
                         settings.destination = destinationInput;
-                settings.radius = alarmRadius;
+                        settings.radius = alarmRadius;
                         sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
                         isAlarmActive = true;
 
-                        // Start journey in service worker
-                        if (serviceWorkerRegistration) {
-                            console.log('Sending START_JOURNEY message to service worker');
-                            serviceWorkerRegistration.active.postMessage({
-                                type: 'START_JOURNEY',
-                                settings: {
-                                    destination: destination,
-                                    radius: alarmRadius,
-                                    initialDistance: map.distance(userMarker.getLatLng(), destination),
-                                    updateInterval: settings.updateInterval
-                                }
-                            });
-                        } else {
-                            console.error('Service worker not ready or not supported');
-                            showAlert('Service worker not ready. Some features may not work.', 'error');
-                        }
-
                         // Register for background sync
-                        if (serviceWorkerRegistration && 'SyncManager' in window) {
-                            serviceWorkerRegistration.sync.register('alarm-sync').catch(function(err) {
+                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                            navigator.serviceWorker.ready.then(function(reg) {
+                                return reg.sync.register('alarm-sync');
+                            }).catch(function(err) {
                                 console.log('Background sync failed:', err);
                             });
                         }
+
+                        // Start background updates and send initial notification
+                        startBackgroundUpdates();
+                        sendInitialNotification(destination);
                     } else {
                         showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
                     }
@@ -338,15 +346,108 @@
         function showNotification(title, body) {
             if ("Notification" in window) {
                 if (Notification.permission === "granted") {
-                    new Notification(title, { body: body });
+                    sendNotification(title, body);
                 } else if (Notification.permission !== "denied") {
                     Notification.requestPermission().then(permission => {
                         if (permission === "granted") {
-                            new Notification(title, { body: body });
+                            sendNotification(title, body);
                         }
                     });
                 }
             }
+
+            // For iOS Safari when in standalone mode (PWA)
+            if (window.navigator.standalone) {
+                // Use local notification
+                if ("Notification" in window) {
+                    new Notification(title, { body: body });
+                }
+            }
+        }
+
+        function showProgressNotification(title, body, progress) {
+            const options = {
+                body: body,
+                icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                tag: 'opentravel-update',
+                renotify: true,
+                data: {
+                    progress: progress
+                }
+            };
+
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.showNotification(title, options);
+                });
+            } else {
+                new Notification(title, options);
+            }
+        }
+
+        // Start background updates
+        function startBackgroundUpdates() {
+            if (backgroundInterval) {
+                clearInterval(backgroundInterval);
+            }
+
+            backgroundInterval = setInterval(() => {
+                if (document.hidden) {
+                    checkLocationAndNotify();
+                }
+            }, settings.updateInterval * 1000); // Convert seconds to milliseconds
+
+            // Listen for visibility changes
+            document.addEventListener("visibilitychange", function() {
+                if (document.hidden) {
+                    checkLocationAndNotify();
+                }
+            });
+        }
+
+        // Check location and send notification
+        function checkLocationAndNotify() {
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    const distance = calculateDistance(position.coords, {latitude: destination[0], longitude: destination[1]});
+                    const progress = calculateProgress(distance);
+                    const formattedDistance = formatDistance(distance);
+                    showProgressNotification('OpenTravel Progress', `Current distance: ${formattedDistance}`, progress);
+                },
+                error => {
+                    console.error('Error getting location:', error);
+                }
+            );
+        }
+
+        // Send initial notification
+        function sendInitialNotification(destination) {
+          navigator.geolocation.getCurrentPosition(
+            position => {
+              const distance = calculateDistance(
+                position.coords, 
+                {latitude: destination[0], longitude: destination[1]}
+              );
+              if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.ready.then(registration => {
+                  registration.active.postMessage({
+                    type: 'START_BACKGROUND_UPDATES',
+                    settings: {
+                      destination: destination,
+                      radius: alarmRadius,
+                      initialDistance: distance,
+                      updateInterval: settings.updateInterval
+                    }
+                  });
+                });
+              }
+            },
+            error => {
+              console.error('Error getting initial location:', error);
+              showAlert('Unable to get initial location. Monitoring started anyway.', 'info');
+            }
+          );
         }
 
         // Calculate distance between two points
@@ -363,6 +464,13 @@
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
             return R * c; // Distance in meters
+        }
+
+        // Format distance
+        function formatDistance(meters) {
+            return meters > 1000 
+                ? `${(meters/1000).toFixed(1)} km` 
+                : `${Math.round(meters)} m`;
         }
 
         // Initialize the app
@@ -401,6 +509,11 @@
                     
                     if (newEnableNotifications && Notification.permission !== "granted") {
                         Notification.requestPermission();
+                    }
+
+                    // Update background updates interval
+                    if (isAlarmActive) {
+                        startBackgroundUpdates();
                     }
                 }
                 showAlert('Settings saved successfully!', 'success');
@@ -465,21 +578,16 @@
                 navigator.serviceWorker.register('/service-worker.js')
                     .then(registration => {
                         console.log('Service Worker registered with scope:', registration.scope);
-                        serviceWorkerRegistration = registration;
                     })
                     .catch(error => {
                         console.error('Service Worker registration failed:', error);
-                        showAlert('Service Worker registration failed. Some features may not work.', 'error');
                     });
-            } else {
-                console.error('Service workers are not supported');
-                showAlert('Service workers are not supported in this browser. Some features may not work.', 'error');
             }
 
             // Listen for messages from the service worker
             navigator.serviceWorker.addEventListener('message', (event) => {
-                if (event.data && event.data.type === 'DESTINATION_REACHED') {
-                    playAlarm();
+                if (event.data && event.data.type === 'LOCATION_UPDATE') {
+                    updateLocation(event.data.position);
                 }
             });
         });
