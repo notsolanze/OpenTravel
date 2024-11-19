@@ -33,41 +33,10 @@
         #alertPopup {
             z-index: 1000;
         }
-        .loading-screen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 255, 255, 0.9);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-        }
-        .spinner {
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #10B981;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
     </style>
 </head>
 <body class="bg-gray-100">
-    <div id="loadingScreen" class="loading-screen">
-        <div class="text-center">
-            <div class="spinner mx-auto mb-4"></div>
-            <p class="text-lg font-semibold text-gray-700">Loading OpenTravel...</p>
-        </div>
-    </div>
-
-    <div id="app" class="max-w-md mx-auto bg-white shadow-lg overflow-hidden min-h-screen hidden">
+    <div id="app" class="max-w-md mx-auto bg-white shadow-lg overflow-hidden min-h-screen">
         <div class="bg-green-500 text-white p-4 flex justify-between items-center">
             <h1 class="text-2xl font-bold">OpenTravel</h1>
             <button id="settingsBtn" class="p-2 rounded-full hover:bg-green-600 transition duration-300">
@@ -157,23 +126,12 @@
         </div>
     </div>
 
-    <div id="iosInstructions" class="hidden p-4 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700">
-        <h3 class="font-bold">For the best experience on iOS:</h3>
-        <ol class="list-decimal list-inside mt-2">
-            <li>Tap the share button at the bottom of the browser</li>
-            <li>Scroll down and select "Add to Home Screen"</li>
-            <li>Tap "Add" in the top right corner</li>
-            <li>Open the app from your home screen</li>
-        </ol>
-    </div>
-
     <script>
         let map, userMarker, destinationMarker, circle;
         let watchId, destination, alarmRadius;
         let isAlarmPlaying = false;
         let isAlarmActive = false;
         let backgroundInterval;
-        let notificationCheckInterval;
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
@@ -191,59 +149,105 @@
             }).addTo(map);
         }
 
-        // Check and request permissions
-        async function checkAndRequestPermissions() {
-            let geolocationPermission = false;
-            let notificationPermission = false;
-
-            // Check geolocation permission
-            if ('geolocation' in navigator) {
-                try {
-                    await new Promise((resolve, reject) => {
-                        navigator.geolocation.getCurrentPosition(resolve, reject);
-                    });
-                    geolocationPermission = true;
-                } catch (error) {
-                    console.error('Geolocation permission denied:', error);
+        // Play alarm
+        function playAlarm() {
+            if (!isAlarmPlaying) {
+                const audio = document.getElementById('alarmAudio');
+                audio.volume = settings.volume;
+                audio.play();
+                isAlarmPlaying = true;
+                console.log('Playing alarm sound');
+                
+                document.getElementById('stopAlarm').classList.remove('hidden');
+                document.getElementById('setAlarm').classList.add('hidden');
+                
+                // Vibrate if supported
+                if ('vibrate' in navigator) {
+                    navigator.vibrate([200, 100, 200]);
                 }
+
+                // Show notification
+                showNotification('OpenTravel Alarm', 'You have reached your destination!');
+            }
+        }
+
+        // Stop alarm
+        function stopAlarm() {
+            const audio = document.getElementById('alarmAudio');
+            audio.pause();
+            audio.currentTime = 0;
+            isAlarmPlaying = false;
+            isAlarmActive = false;
+            document.getElementById('stopAlarm').classList.add('hidden');
+            document.getElementById('setAlarm').classList.remove('hidden');
+            showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
+            
+            // Stop background sync
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.sync.unregister('alarm-sync');
+                });
             }
 
-            // Check notification permission
-            if ('Notification' in window) {
-                if (Notification.permission === 'granted') {
-                    notificationPermission = true;
-                } else if (Notification.permission !== 'denied') {
-                    const permission = await Notification.requestPermission();
-                    notificationPermission = permission === 'granted';
-                }
+            // Clear background interval
+            if (backgroundInterval) {
+                clearInterval(backgroundInterval);
+            }
+        }
+
+        // Update user location
+        function updateLocation(position) {
+            const { latitude, longitude } = position.coords;
+            
+            if (!userMarker) {
+                userMarker = L.marker([latitude, longitude], {
+                    icon: L.icon({
+                        iconUrl: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                        iconSize: [30, 30],
+                        iconAnchor: [20, 20]
+                    })
+                }).addTo(map);
+                map.setView([latitude, longitude], 15);
+            } else {
+                userMarker.setLatLng([latitude, longitude]);
             }
 
-            return { geolocationPermission, notificationPermission };
+            if (destination && isAlarmActive) {
+                const distance = map.distance([latitude, longitude], destination);
+                updateDistanceDisplay(distance);
+                
+                if (distance <= alarmRadius && !isAlarmPlaying) {
+                    playAlarm();
+                    document.getElementById('status').textContent = 'You have reached your destination!';
+                    document.getElementById('status').classList.add('text-green-600', 'font-semibold');
+                }
+            }
+        }
+
+        // Update distance display
+        function updateDistanceDisplay(distance) {
+            const distanceText = `Distance: ${formatNumber(Math.round(distance))} meters`;
+            document.getElementById('distance').textContent = distanceText;
+            
+            // Update notification if enabled
+            if (settings.enableNotifications) {
+                showNotification('OpenTravel Distance Update', distanceText);
+            }
+        }
+
+        // Format number with commas
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
         }
 
         // Set alarm
-        async function setAlarm() {
-            const { geolocationPermission, notificationPermission } = await checkAndRequestPermissions();
-
-            if (!geolocationPermission) {
-                showAlert('Geolocation permission is required to set the alarm. Please enable it in your browser settings.', 'error');
-                return;
-            }
-
-            if (!notificationPermission && settings.enableNotifications) {
-                showAlert('Notification permission is recommended for better experience. You can enable it in your browser settings.', 'info');
-            }
-
+        function setAlarm() {
             const destinationInput = document.getElementById('destination').value;
             alarmRadius = parseInt(document.getElementById('radius').value);
 
             if (!destinationInput) {
                 showAlert('Please enter a destination', 'error');
                 return;
-            }
-
-            if (isIOS()) {
-                showAlert('On iOS, keep the app open or add it to your home screen for the best experience. Notifications may not work when the app is in the background.', 'info');
             }
 
             fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destinationInput)}, Philippines`)
@@ -297,6 +301,15 @@
                         sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
                         isAlarmActive = true;
 
+                        // Register for background sync
+                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                            navigator.serviceWorker.ready.then(function(reg) {
+                                return reg.sync.register('alarm-sync');
+                            }).catch(function(err) {
+                                console.log('Background sync failed:', err);
+                            });
+                        }
+
                         // Start background updates and send initial notification
                         startBackgroundUpdates();
                         sendInitialNotification(destination);
@@ -310,122 +323,45 @@
                 });
         }
 
-        // Play alarm
-        function playAlarm() {
-            if (!isAlarmPlaying) {
-                const audio = document.getElementById('alarmAudio');
-                audio.volume = settings.volume;
-                audio.play();
-                isAlarmPlaying = true;
-                console.log('Playing alarm sound');
-                
-                document.getElementById('stopAlarm').classList.remove('hidden');
-                document.getElementById('setAlarm').classList.add('hidden');
-                
-                // Vibrate if supported
-                if ('vibrate' in navigator) {
-                    navigator.vibrate([200, 100, 200]);
-                }
-
-                // Show notification
-                showNotification('OpenTravel Alarm', 'You have reached your destination!');
-            }
-        }
-
-        // Stop alarm
-        function stopAlarm() {
-            const audio = document.getElementById('alarmAudio');
-            audio.pause();
-            audio.currentTime = 0;
-            isAlarmPlaying = false;
-            isAlarmActive = false;
-            document.getElementById('stopAlarm').classList.add('hidden');
-            document.getElementById('setAlarm').classList.remove('hidden');
-            showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
-            
-            // Clear background interval
-            if (backgroundInterval) {
-                clearInterval(backgroundInterval);
-            }
-        }
-
-        // Update user location
-        function updateLocation(position) {
-            const { latitude, longitude } = position.coords;
-            
-            if (!userMarker) {
-                userMarker = L.marker([latitude, longitude], {
-                    icon: L.icon({
-                        iconUrl: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                        iconSize: [30, 30],
-                        iconAnchor: [20, 20]
-                    })
-                }).addTo(map);
-                map.setView([latitude, longitude], 15);
-            } else {
-                userMarker.setLatLng([latitude, longitude]);
-            }
-
-            if (destination && isAlarmActive) {
-                const distance = map.distance([latitude, longitude], destination);
-                updateDistanceDisplay(distance);
-                
-                if (distance <= alarmRadius && !isAlarmPlaying) {
-                    playAlarm();
-                    document.getElementById('status').textContent = 'You have reached your destination!';
-                    document.getElementById('status').classList.add('text-green-600', 'font-semibold');
-                }
-            }
-        }
-
-        // Update distance display
-        function updateDistanceDisplay(distance) {
-            const distanceText = `Distance: ${formatNumber(Math.round(distance))} meters`;
-            document.getElementById('distance').textContent = distanceText;
-            
-            // Update notification if enabled
-            if (settings.enableNotifications) {
-                showNotification('OpenTravel Distance Update', distanceText);
-            }
-        }
-
-        // Format number with commas
-        function formatNumber(num) {
-            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-        }
-
         // Show notification
         function showNotification(title, body) {
-            if ("Notification" in window && Notification.permission === "granted") {
-                if (isIOS()) {
-                    // iOS-specific handling
-                    if (window.navigator.standalone) {
-                        // App is in standalone mode (added to home screen)
-                        showAlert(`${title}: ${body}`, 'info');
-                    } else {
-                        // Fallback for Safari
-                        alert(`${title}: ${body}`);
-                    }
-                } else if (isAndroid()) {
-                    // Android-specific handling
-                    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                        navigator.serviceWorker.ready.then(registration => {
-                            registration.showNotification(title, {
-                                body: body,
-                                icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                                vibrate: [200, 100, 200]
-                            });
-                        });
-                    } else {
-                        new Notification(title, { body: body });
-                    }
-                } else {
-                    // Desktop or other platforms
+            if ("Notification" in window) {
+                if (Notification.permission === "granted") {
+                    sendNotification(title, body);
+                } else if (Notification.permission !== "denied") {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === "granted") {
+                            sendNotification(title, body);
+                        }
+                    });
+                }
+            }
+
+            // For iOS Safari when in standalone mode (PWA)
+            if (window.navigator.standalone) {
+                // Use local notification
+                if ("Notification" in window) {
                     new Notification(title, { body: body });
                 }
+            }
+        }
+
+        function sendNotification(title, body) {
+            const options = {
+                body: body,
+                icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                vibrate: [200, 100, 200],
+                tag: 'opentravel-update',
+                renotify: true
+            };
+
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.showNotification(title, options);
+                });
             } else {
-                // Fallback if notifications are not supported or permitted
-                showAlert(`${title}: ${body}`, 'info');
+                new Notification(title, options);
             }
         }
 
@@ -435,22 +371,16 @@
                 clearInterval(backgroundInterval);
             }
 
-            let lastUpdateTime = Date.now();
-            const minInterval = 60000; // Minimum 1 minute between updates
-
             backgroundInterval = setInterval(() => {
-                const now = Date.now();
-                if ((document.hidden || isIOS()) && now - lastUpdateTime >= minInterval) {
+                if (document.hidden) {
                     checkLocationAndNotify();
-                    lastUpdateTime = now;
                 }
-            }, 10000); // Check every 10 seconds, but only update if enough time has passed
+            }, settings.updateInterval * 60 * 1000); // Convert minutes to milliseconds
 
             // Listen for visibility changes
             document.addEventListener("visibilitychange", function() {
-                if (!document.hidden || isIOS()) {
+                if (document.hidden) {
                     checkLocationAndNotify();
-                    lastUpdateTime = Date.now();
                 }
             });
         }
@@ -508,7 +438,7 @@
         }
 
         // Initialize the app
-        document.addEventListener('DOMContentLoaded', async () => {
+        document.addEventListener('DOMContentLoaded', () => {
             initMap();
             document.getElementById('setAlarm').addEventListener('click', setAlarm);
             document.getElementById('stopAlarm').addEventListener('click', stopAlarm);
@@ -585,35 +515,27 @@
             }
             updateAlarmSound();
 
-            // Check initial permissions
-            const { geolocationPermission, notificationPermission } = await checkAndRequestPermissions();
-
-            if (!geolocationPermission) {
-                showAlert('Geolocation permission is required for this app to function properly. Please enable it in your browser settings.', 'error');
-            }
-
-            if (!notificationPermission && settings.enableNotifications) {
-                showAlert('Notifications are disabled. Enable them in your browser settings for a better experience.', 'info');
-            }
-
-            // Get initial user location if permission is granted
-            if (geolocationPermission) {
-                navigator.geolocation.getCurrentPosition(
-                    updateLocation,
-                    error => {
-                        console.error('Error getting initial location:', error);
-                        showAlert('Unable to get your initial location. Please check your settings and try again.', 'error');
-                    },
-                    {
-                        enableHighAccuracy: true,
-                        maximumAge: 0,
-                        timeout: 5000
-                    }
-                );
-            }
+            // Get initial user location
+            navigator.geolocation.getCurrentPosition(
+                updateLocation,
+                error => {
+                    console.error('Error getting initial location:', error);
+                    showAlert('Unable to get your initial location. Please check your settings and try again.', 'error');
+                },
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 5000
+                }
+            );
 
             // Initialize Lucide icons
             lucide.createIcons();
+
+            // Request notification permission if enabled
+            if (settings.enableNotifications) {
+                Notification.requestPermission();
+            }
 
             // Register service worker
             if ('serviceWorker' in navigator) {
@@ -632,20 +554,6 @@
                     updateLocation(event.data.position);
                 }
             });
-
-            // Hide loading screen and show app
-            document.getElementById('loadingScreen').style.display = 'none';
-            document.getElementById('app').classList.remove('hidden');
-
-            // Show iOS instructions if applicable
-            if (isIOS()) {
-                document.getElementById('iosInstructions').classList.remove('hidden');
-            }
-
-            // Start notification polling for iOS
-            if (isIOS()) {
-                startNotificationPolling();
-            }
         });
 
         function updateAlarmSound() {
@@ -722,42 +630,6 @@
             alertPopup.classList.add('opacity-0', '-translate-y-full');
             alertPopup.classList.remove('border-l-4', 'border-green-500', 'border-red-500', 'border-blue-500');
             document.getElementById('alertIcon').classList.remove('bg-green-100', 'bg-red-100', 'bg-blue-100');
-        }
-
-        function isIOS() {
-            return /iPhone|iPad|iPod/i.test(navigator.userAgent);
-        }
-
-        function isAndroid() {
-            return /Android/i.test(navigator.userAgent);
-        }
-
-        function startNotificationPolling() {
-            if (notificationCheckInterval) {
-                clearInterval(notificationCheckInterval);
-            }
-            
-            notificationCheckInterval = setInterval(() => {
-                checkForNotifications();
-            }, 60000); // Check every minute
-        }
-
-        async function checkForNotifications() {
-            try {
-                const response = await fetch('/api/check-notifications');
-                const data = await response.json();
-                
-                if (data.hasNotification) {
-                    showNotification(data.title, data.message);
-                }
-            } catch (error) {
-                console.error('Error checking for notifications:', error);
-            }
-        }
-
-        // Request notification permission
-        if ("Notification" in window) {
-            Notification.requestPermission();
         }
     </script>
 </body>
