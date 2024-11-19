@@ -68,6 +68,7 @@ async function checkLocation() {
       {latitude: alarmSettings.destination[0], longitude: alarmSettings.destination[1]}
     );
     const progress = calculateProgress(distance);
+    console.log('Updating notification with progress:', progress); // Add this line
     updateNotificationWithProgress('OpenTravel Progress', `Distance: ${formatDistance(distance)}`, progress);
     
     if (distance <= alarmSettings.radius) {
@@ -148,7 +149,8 @@ function updateNotificationWithProgress(title, body, progress) {
       renotify: true,
       data: {
         progress: progress
-      }
+      },
+      actions: [{ action: 'open', title: 'View' }]
     });
   });
 }
