@@ -156,9 +156,9 @@ function showNotification(type, estimatedArrival = null) {
 
 function calculateEstimatedTime() {
   const now = new Date();
-  const speed = 50;
-  const distance = alarmSettings.initialDistance;
-  const timeInHours = distance / (speed * 1000);
+  const speed = 50; // km/h
+  const distance = alarmSettings.initialDistance / 1000; // Convert meters to kilometers
+  const timeInHours = distance / speed;
   const timeInMs = timeInHours * 60 * 60 * 1000;
 
   return {
