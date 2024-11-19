@@ -12,8 +12,7 @@ const urlsToCache = [
 ];
 
 let alarmSettings = null;
-let hasStartNotificationSent = false;
-let hasEndNotificationSent = false;
+let currentNotification = null;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -46,22 +45,15 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'START_JOURNEY') {
     alarmSettings = event.data.settings;
-    hasStartNotificationSent = false;
-    hasEndNotificationSent = false;
     startJourney();
   }
 });
 
 function startJourney() {
-  if (alarmSettings && !hasStartNotificationSent) {
+  if (alarmSettings) {
     const estimatedTime = calculateEstimatedTime();
     // Send initial notification
-    sendNotification('start', {
-      title: 'Journey Started',
-      body: `Estimated arrival by ${formatTime(estimatedTime.end)}`,
-      progress: 0
-    });
-    hasStartNotificationSent = true;
+    showSingleNotification('Journey Started', `Estimated arrival: ${formatTime(estimatedTime.end)}`);
     
     // Start location checking
     setInterval(() => {
@@ -71,8 +63,6 @@ function startJourney() {
 }
 
 async function checkLocation() {
-  if (hasEndNotificationSent) return;
-
   try {
     const position = await getCurrentPosition();
     const distance = calculateDistance(
@@ -80,14 +70,8 @@ async function checkLocation() {
       {latitude: alarmSettings.destination[0], longitude: alarmSettings.destination[1]}
     );
     
-    // Only send notification when near destination
-    if (distance <= alarmSettings.radius && !hasEndNotificationSent) {
-      sendNotification('end', {
-        title: 'Destination Reached',
-        body: 'You have arrived at your destination!',
-        progress: 100
-      });
-      hasEndNotificationSent = true;
+    if (distance <= alarmSettings.radius) {
+      showDestinationReachedNotification();
       self.registration.unregister();
     }
   } catch (error) {
@@ -106,7 +90,7 @@ function getCurrentPosition() {
 }
 
 function calculateDistance(point1, point2) {
-  const R = 6371e3; // Earth's radius in meters
+  const R = 6371e3;
   const φ1 = point1.latitude * Math.PI/180;
   const φ2 = point2.latitude * Math.PI/180;
   const Δφ = (point2.latitude - point1.latitude) * Math.PI/180;
@@ -117,41 +101,52 @@ function calculateDistance(point1, point2) {
             Math.sin(Δλ/2) * Math.sin(Δλ/2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
-  return R * c; // Distance in meters
+  return R * c;
 }
 
-function sendNotification(type, { title, body, progress }) {
+function showSingleNotification(title, message) {
+  if (currentNotification) {
+    currentNotification.close();
+  }
+
   const options = {
     icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
     badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    tag: 'opentravel-journey',
-    renotify: true,
+    tag: 'opentravel-single',
+    renotify: false,
     requireInteraction: true,
-    actions: [{ action: 'open', title: 'View' }],
-    timestamp: Date.now(),
-    body: body,
-    data: { type, progress }
+    silent: true,
+    body: message
   };
 
-  // Add vibration for destination reached
-  if (type === 'end') {
-    options.vibrate = [200, 100, 200];
+  self.registration.showNotification(title, options)
+    .then(notification => {
+      currentNotification = notification;
+    });
+}
+
+function showDestinationReachedNotification() {
+  if (currentNotification) {
+    currentNotification.close();
   }
 
-  // Create progress bar using emoji blocks
-  const progressBlocks = 10;
-  const filledBlocks = Math.round((progress / 100) * progressBlocks);
-  const progressBar = '▓'.repeat(filledBlocks) + '░'.repeat(progressBlocks - filledBlocks);
-  options.body = `${body}\n${progressBar} ${Math.round(progress)}%`;
+  const options = {
+    icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+    badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+    tag: 'opentravel-destination',
+    requireInteraction: true,
+    vibrate: [200, 100, 200],
+    body: 'You have reached your destination!'
+  };
 
-  self.registration.showNotification(title, options);
+  self.registration.showNotification('Destination Reached', options);
 }
 
 function calculateEstimatedTime() {
   const now = new Date();
-  const speed = 50; // assumed average speed in km/h
+  const speed = 50;
   const distance = alarmSettings.initialDistance;
-  const timeInHours = distance / (speed * 1000); // convert distance to km
+  const timeInHours = distance / (speed * 1000);
   const timeInMs = timeInHours * 60 * 60 * 1000;
   
   return {
