@@ -14,23 +14,38 @@ const urlsToCache = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(urlsToCache))
+      .then((cache) => {
+        console.log('Opened cache');
+        return cache.addAll(urlsToCache);
+      })
+      .catch((error) => {
+        console.error('Cache opening failed:', error);
+      })
   );
 });
 
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request)
-      .then((response) => response || fetch(event.request))
+      .then((response) => {
+        if (response) {
+          return response;
+        }
+        return fetch(event.request).catch(() => {
+          // If both cache and network fail, you might want to show an offline page
+          return new Response("You are offline and the resource is not cached.");
+        });
+      })
   );
 });
 
 self.addEventListener('activate', (event) => {
+  const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
+          if (cacheWhitelist.indexOf(cacheName) === -1) {
             return caches.delete(cacheName);
           }
         })
@@ -39,42 +54,85 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-let alarmSettings = null;
-let notificationId = null;
-
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'START_JOURNEY') {
-    alarmSettings = event.data.settings;
-    startJourney();
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
   }
 });
 
-function startJourney() {
-  if (alarmSettings) {
-    const estimatedTime = calculateEstimatedTime();
-    sendStatusNotification('start', estimatedTime);
-    setInterval(() => {
-      checkLocation();
-    }, alarmSettings.updateInterval * 1000);
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'alarm-sync') {
+    event.waitUntil(checkAlarmCondition());
   }
-}
+});
 
-async function checkLocation() {
-  try {
-    const position = await getCurrentPosition();
-    const distance = calculateDistance(
-      position.coords, 
-      {latitude: alarmSettings.destination[0], longitude: alarmSettings.destination[1]}
+self.addEventListener('push', (event) => {
+  const data = event.data.json();
+  const options = {
+    body: data.body,
+    icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+    badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+    vibrate: [100, 50, 100],
+    data: {
+      dateOfArrival: Date.now(),
+      primaryKey: 'alarm'
+    },
+    actions: [
+      { action: 'open', title: 'Open App' },
+      { action: 'close', title: 'Close' }
+    ],
+    tag: 'opentravel-update',
+    renotify: true
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, options)
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  if (event.action === 'open') {
+    event.waitUntil(
+      clients.openWindow('/')
     );
-    const progress = calculateProgress(distance);
-    updateNotificationProgress(progress);
-    
-    if (distance <= alarmSettings.radius) {
-      sendStatusNotification('end');
-      self.registration.unregister();
+  }
+});
+
+async function checkAlarmCondition() {
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    const alarmSettingsResponse = await cache.match('/alarm-settings');
+    if (alarmSettingsResponse) {
+      const alarmSettings = await alarmSettingsResponse.json();
+      const position = await getCurrentPosition();
+      const distance = calculateDistance(position.coords, alarmSettings.destination);
+      
+      if (distance <= alarmSettings.radius) {
+        await self.registration.showNotification('OpenTravel Alarm', {
+          body: 'You have reached your destination!',
+          icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+          badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+          vibrate: [200, 100, 200],
+          tag: 'opentravel-alarm',
+          renotify: true
+        });
+      } else {
+        const eta = calculateETA(distance);
+        await self.registration.showNotification('OpenTravel Update', {
+          body: `${formatDistance(distance)} from destination. ETA: ${eta}`,
+          icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+          badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+          tag: 'opentravel-update',
+          renotify: true,
+          actions: [
+            { action: 'open', title: 'View Map' }
+          ]
+        });
+      }
     }
   } catch (error) {
-    console.error('Error checking location:', error);
+    console.error('Error in checkAlarmCondition:', error);
   }
 }
 
@@ -88,12 +146,12 @@ function getCurrentPosition() {
   });
 }
 
-function calculateDistance(point1, point2) {
+function calculateDistance(position1, position2) {
   const R = 6371e3; // Earth's radius in meters
-  const φ1 = point1.latitude * Math.PI/180;
-  const φ2 = point2.latitude * Math.PI/180;
-  const Δφ = (point2.latitude - point1.latitude) * Math.PI/180;
-  const Δλ = (point2.longitude - point1.longitude) * Math.PI/180;
+  const φ1 = position1.latitude * Math.PI/180;
+  const φ2 = position2[0] * Math.PI/180;
+  const Δφ = (position2[0] - position1.latitude) * Math.PI/180;
+  const Δλ = (position2[1] - position1.longitude) * Math.PI/180;
 
   const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
             Math.cos(φ1) * Math.cos(φ2) *
@@ -103,82 +161,16 @@ function calculateDistance(point1, point2) {
   return R * c; // Distance in meters
 }
 
-function calculateProgress(currentDistance) {
-  const totalDistance = alarmSettings.initialDistance;
-  return Math.max(0, Math.min(100, ((totalDistance - currentDistance) / totalDistance) * 100));
+function formatDistance(meters) {
+  return meters > 1000 
+    ? `${(meters/1000).toFixed(1)} km` 
+    : `${Math.round(meters)} m`;
 }
 
-function sendStatusNotification(type, estimatedTime) {
-  const title = 'OpenTravel';
-  const options = {
-    icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    tag: 'opentravel-status',
-    renotify: true,
-    requireInteraction: true,
-    actions: [{ action: 'open', title: 'View' }],
-    timestamp: Date.now()
-  };
-
-  if (type === 'start') {
-    options.body = `Arrival by ${formatTime(estimatedTime.end)}`;
-    options.data = { type: 'start', progress: 0 };
-  } else if (type === 'end') {
-    options.body = 'You have reached your destination!';
-    options.data = { type: 'end', progress: 100 };
-    options.vibrate = [200, 100, 200];
-  }
-
-  self.registration.showNotification(title, options).then((notification) => {
-    notificationId = notification.tag;
-  });
-}
-
-function updateNotificationProgress(progress) {
-  if (notificationId) {
-    self.registration.getNotifications({ tag: notificationId }).then((notifications) => {
-      if (notifications.length > 0) {
-        const notification = notifications[0];
-        const updatedOptions = {
-          ...notification.options,
-          data: { ...notification.data, progress: progress }
-        };
-        self.registration.showNotification(notification.title, updatedOptions);
-      }
-    });
-  }
-}
-
-function calculateEstimatedTime() {
+function calculateETA(distance) {
+  // Assuming average speed of 30 km/h for demonstration
+  const timeInMinutes = (distance / 1000) / (30 / 60);
   const now = new Date();
-  const speed = 50; // assumed average speed in km/h
-  const distance = alarmSettings.initialDistance;
-  const timeInHours = distance / (speed * 1000); // convert distance to km
-  const timeInMs = timeInHours * 60 * 60 * 1000;
-  
-  return {
-    start: now,
-    end: new Date(now.getTime() + timeInMs)
-  };
+  now.setMinutes(now.getMinutes() + timeInMinutes);
+  return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
-
-function formatTime(date) {
-  return date.toLocaleTimeString('en-US', { 
-    hour: 'numeric', 
-    minute: '2-digit',
-    hour12: true 
-  });
-}
-
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  if (event.action === 'open') {
-    clients.openWindow('/');
-  }
-});
-
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'alarm-sync') {
-    event.waitUntil(checkLocation());
-  }
-});
