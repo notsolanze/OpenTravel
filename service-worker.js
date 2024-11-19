@@ -153,7 +153,7 @@ function calculateEstimatedTime() {
   const distance = alarmSettings.initialDistance;
   const timeInHours = distance / (speed * 1000);
   const timeInMs = timeInHours * 60 * 60 * 1000;
-  
+
   return {
     start: now,
     end: new Date(now.getTime() + timeInMs)
