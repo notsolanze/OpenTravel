@@ -143,6 +143,7 @@
         let watchId, destination, alarmRadius;
         let isAlarmPlaying = false;
         let isAlarmActive = false;
+        let serviceWorkerRegistration = null;
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
@@ -194,10 +195,8 @@
             showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
             
             // Stop background sync
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.ready.then(registration => {
-                    registration.sync.unregister('alarm-sync');
-                });
+            if (serviceWorkerRegistration) {
+                serviceWorkerRegistration.sync.unregister('alarm-sync');
             }
         }
 
@@ -303,28 +302,25 @@
                         isAlarmActive = true;
 
                         // Start journey in service worker
-                        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                            navigator.serviceWorker.ready.then(registration => {
-                                console.log('Sending START_JOURNEY message to service worker');
-                                registration.active.postMessage({
-                                    type: 'START_JOURNEY',
-                                    settings: {
-                                        destination: destination,
-                                        radius: alarmRadius,
-                                        initialDistance: map.distance(userMarker.getLatLng(), destination),
-                                        updateInterval: settings.updateInterval
-                                    }
-                                });
+                        if (serviceWorkerRegistration) {
+                            console.log('Sending START_JOURNEY message to service worker');
+                            serviceWorkerRegistration.active.postMessage({
+                                type: 'START_JOURNEY',
+                                settings: {
+                                    destination: destination,
+                                    radius: alarmRadius,
+                                    initialDistance: map.distance(userMarker.getLatLng(), destination),
+                                    updateInterval: settings.updateInterval
+                                }
                             });
                         } else {
                             console.error('Service worker not ready or not supported');
+                            showAlert('Service worker not ready. Some features may not work.', 'error');
                         }
 
                         // Register for background sync
-                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
-                            navigator.serviceWorker.ready.then(function(reg) {
-                                return reg.sync.register('alarm-sync');
-                            }).catch(function(err) {
+                        if (serviceWorkerRegistration && 'SyncManager' in window) {
+                            serviceWorkerRegistration.sync.register('alarm-sync').catch(function(err) {
                                 console.log('Background sync failed:', err);
                             });
                         }
@@ -469,10 +465,15 @@
                 navigator.serviceWorker.register('/service-worker.js')
                     .then(registration => {
                         console.log('Service Worker registered with scope:', registration.scope);
+                        serviceWorkerRegistration = registration;
                     })
                     .catch(error => {
                         console.error('Service Worker registration failed:', error);
+                        showAlert('Service Worker registration failed. Some features may not work.', 'error');
                     });
+            } else {
+                console.error('Service workers are not supported');
+                showAlert('Service workers are not supported in this browser. Some features may not work.', 'error');
             }
 
             // Listen for messages from the service worker
