@@ -121,7 +121,7 @@
         </div>
     </div>
     <div id="distance" class="distance-badge text-sm font-semibold text-green-600"></div>
-    <audio id="alarmAudio" loop>
+        <audio id="alarmAudio" loop>
         <source src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3" type="audio/mpeg">
         Your browser does not support the audio element.
     </audio>
@@ -179,7 +179,9 @@
                 }
 
                 // Show notification
-                showNotification('OpenTravel Alarm', 'You have reached your destination!');
+                if (settings.enableNotifications) {
+                    showNotification('OpenTravel Alarm', 'You have reached your destination!');
+                }
             }
         }
 
@@ -250,7 +252,7 @@
             
             // Update notification if enabled
             if (settings.enableNotifications) {
-                showProgressNotification('OpenTravel Progress', distanceText, progress);
+                updateProgressNotification('OpenTravel Progress', distanceText, progress);
             }
         }
 
@@ -344,7 +346,7 @@
 
         // Show notification
         function showNotification(title, body) {
-            if ("Notification" in window) {
+            if (settings.enableNotifications && "Notification" in window) {
                 if (Notification.permission === "granted") {
                     sendNotification(title, body);
                 } else if (Notification.permission !== "denied") {
@@ -357,7 +359,7 @@
             }
 
             // For iOS Safari when in standalone mode (PWA)
-            if (window.navigator.standalone) {
+            if (window.navigator.standalone && settings.enableNotifications) {
                 // Use local notification
                 if ("Notification" in window) {
                     new Notification(title, { body: body });
@@ -365,24 +367,16 @@
             }
         }
 
-        function showProgressNotification(title, body, progress) {
-            const options = {
-                body: body,
-                icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                tag: 'opentravel-update',
-                renotify: true,
-                data: {
-                    progress: progress
-                }
-            };
-
-            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        function updateProgressNotification(title, body, progress) {
+            if (settings.enableNotifications && 'serviceWorker' in navigator && navigator.serviceWorker.controller) {
                 navigator.serviceWorker.ready.then(registration => {
-                    registration.showNotification(title, options);
+                    registration.active.postMessage({
+                        type: 'UPDATE_NOTIFICATION',
+                        title: title,
+                        body: body,
+                        progress: progress
+                    });
                 });
-            } else {
-                new Notification(title, options);
             }
         }
 
@@ -413,7 +407,9 @@
                     const distance = calculateDistance(position.coords, {latitude: destination[0], longitude: destination[1]});
                     const progress = calculateProgress(distance);
                     const formattedDistance = formatDistance(distance);
-                    showProgressNotification('OpenTravel Progress', `Current distance: ${formattedDistance}`, progress);
+                    if (settings.enableNotifications) {
+                        updateProgressNotification('OpenTravel Progress', `Current distance: ${formattedDistance}`, progress);
+                    }
                 },
                 error => {
                     console.error('Error getting location:', error);
@@ -432,7 +428,7 @@
               if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
                 navigator.serviceWorker.ready.then(registration => {
                   registration.active.postMessage({
-                    type: 'START_BACKGROUND_UPDATES',
+                    type: 'START_JOURNEY',
                     settings: {
                       destination: destination,
                       radius: alarmRadius,
