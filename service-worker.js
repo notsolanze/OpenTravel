@@ -12,7 +12,8 @@ const urlsToCache = [
 ];
 
 let alarmSettings = null;
-let currentNotification = null;
+let hasStarted = false;
+let hasReached = false;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -44,25 +45,31 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'START_JOURNEY') {
+    // Reset flags when starting new journey
+    hasStarted = false;
+    hasReached = false;
     alarmSettings = event.data.settings;
     startJourney();
   }
 });
 
 function startJourney() {
-  if (alarmSettings) {
-    const estimatedTime = calculateEstimatedTime();
-    // Send initial notification
-    showSingleNotification('Journey Started', `Estimated arrival: ${formatTime(estimatedTime.end)}`);
-    
-    // Start location checking
-    setInterval(() => {
-      checkLocation();
-    }, alarmSettings.updateInterval * 1000);
-  }
+  if (!alarmSettings || hasStarted) return;
+  
+  // Send only the initial notification
+  const estimatedTime = calculateEstimatedTime();
+  showNotification('start', estimatedTime.end);
+  hasStarted = true;
+
+  // Only check location, don't send notifications for updates
+  setInterval(() => {
+    checkLocation();
+  }, alarmSettings.updateInterval * 1000);
 }
 
 async function checkLocation() {
+  if (!alarmSettings || hasReached) return;
+
   try {
     const position = await getCurrentPosition();
     const distance = calculateDistance(
@@ -70,8 +77,10 @@ async function checkLocation() {
       {latitude: alarmSettings.destination[0], longitude: alarmSettings.destination[1]}
     );
     
-    if (distance <= alarmSettings.radius) {
-      showDestinationReachedNotification();
+    // Only send notification when destination is reached
+    if (distance <= alarmSettings.radius && !hasReached) {
+      showNotification('end');
+      hasReached = true;
       self.registration.unregister();
     }
   } catch (error) {
@@ -104,42 +113,38 @@ function calculateDistance(point1, point2) {
   return R * c;
 }
 
-function showSingleNotification(title, message) {
-  if (currentNotification) {
-    currentNotification.close();
+function showNotification(type, estimatedArrival = null) {
+  // Close any existing notifications first
+  self.registration.getNotifications().then(notifications => {
+    notifications.forEach(notification => notification.close());
+  });
+
+  let title, body, options;
+
+  if (type === 'start') {
+    title = 'Journey Started';
+    body = `Estimated arrival by ${formatTime(estimatedArrival)}`;
+    options = {
+      body,
+      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+      tag: 'opentravel-journey', // Use same tag to prevent duplicates
+      renotify: false,
+      requireInteraction: true,
+      silent: true
+    };
+  } else {
+    title = 'Destination Reached';
+    body = 'You have arrived at your destination!';
+    options = {
+      body,
+      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+      tag: 'opentravel-journey',
+      requireInteraction: true,
+      vibrate: [200, 100, 200]
+    };
   }
 
-  const options = {
-    icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    tag: 'opentravel-single',
-    renotify: false,
-    requireInteraction: true,
-    silent: true,
-    body: message
-  };
-
-  self.registration.showNotification(title, options)
-    .then(notification => {
-      currentNotification = notification;
-    });
-}
-
-function showDestinationReachedNotification() {
-  if (currentNotification) {
-    currentNotification.close();
-  }
-
-  const options = {
-    icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    tag: 'opentravel-destination',
-    requireInteraction: true,
-    vibrate: [200, 100, 200],
-    body: 'You have reached your destination!'
-  };
-
-  self.registration.showNotification('Destination Reached', options);
+  self.registration.showNotification(title, options);
 }
 
 function calculateEstimatedTime() {
