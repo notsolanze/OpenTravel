@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,8 +8,6 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/128/10473/10473293.png">
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/localforage@1.10.0/dist/localforage.min.js"></script>
-    <script src="https://unpkg.com/leaflet.offline@2.2.0/dist/leaflet.offline.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="manifest" href="/manifest.json">
@@ -137,18 +134,6 @@
                 <label for="updateInterval" class="block text-sm font-medium text-gray-700 mb-1">Background Update Interval (minutes)</label>
                 <input type="number" id="updateInterval" class="w-full p-3 border border-gray-300 rounded-full focus:ring-green-500 focus:border-green-500" value="5" min="1" max="60">
             </div>
-            <div class="mb-4">
-                <label class="flex items-center">
-                    <input type="checkbox" id="enableOfflineMaps" class="form-checkbox h-5 w-5 text-green-600">
-                    <span class="ml-2 text-sm text-gray-700">Enable Offline Maps</span>
-                </label>
-            </div>
-            <div id="offlineMapControls" class="mb-4 hidden">
-                <button id="downloadOfflineMap" class="w-full bg-blue-500 text-white p-3 rounded-lg hover:bg-blue-600 transition duration-300 mb-2">
-                    Download Offline Map
-                </button>
-                <p id="offlineMapStatus" class="text-sm text-gray-600"></p>
-            </div>
             <button id="saveSettings" class="w-full bg-green-500 text-white p-3 rounded-lg hover:bg-green-600 transition duration-300">
                 Save Settings
             </button>
@@ -189,33 +174,21 @@
         let isAlarmActive = false;
         let backgroundInterval;
         let notificationCheckInterval;
-        let offlineLayer;
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
             alarmSound: 'default',
             volume: 0.5,
             enableNotifications: true,
-            updateInterval: 5,
-            enableOfflineMaps: false
+            updateInterval: 5
         };
         
         // Initialize map
-        async function initMap() {
-            const tileLayerUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-            const tileLayerOptions = {
-                attribution: '© OpenTravel',
-                maxZoom: 18
-            };
-
-            if (settings.enableOfflineMaps) {
-                offlineLayer = L.tileLayer.offline(tileLayerUrl, tileLayerOptions);
-                await offlineLayer.addTo(map);
-            } else {
-                L.tileLayer(tileLayerUrl, tileLayerOptions).addTo(map);
-            }
-
+        function initMap() {
             map = L.map('map').setView([14.5995, 120.9842], 11); // Manila coordinates
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenTravel'
+            }).addTo(map);
         }
 
         // Check and request permissions
@@ -536,7 +509,7 @@
 
         // Initialize the app
         document.addEventListener('DOMContentLoaded', async () => {
-            await initMap();
+            initMap();
             document.getElementById('setAlarm').addEventListener('click', setAlarm);
             document.getElementById('stopAlarm').addEventListener('click', stopAlarm);
 
@@ -547,8 +520,6 @@
                 document.getElementById('volume').value = settings.volume;
                 document.getElementById('enableNotifications').checked = settings.enableNotifications;
                 document.getElementById('updateInterval').value = settings.updateInterval;
-                document.getElementById('enableOfflineMaps').checked = settings.enableOfflineMaps;
-                document.getElementById('offlineMapControls').style.display = settings.enableOfflineMaps ? 'block' : 'none';
             });
 
             document.getElementById('saveSettings').addEventListener('click', () => {
@@ -556,19 +527,16 @@
                 const newVolume = parseFloat(document.getElementById('volume').value);
                 const newEnableNotifications = document.getElementById('enableNotifications').checked;
                 const newUpdateInterval = parseInt(document.getElementById('updateInterval').value);
-                const newEnableOfflineMaps = document.getElementById('enableOfflineMaps').checked;
                 
                 if (newAlarmSound !== settings.alarmSound || 
                     newVolume !== settings.volume || 
                     newEnableNotifications !== settings.enableNotifications ||
-                    newUpdateInterval !== settings.updateInterval ||
-                    newEnableOfflineMaps !== settings.enableOfflineMaps) {
+                    newUpdateInterval !== settings.updateInterval) {
                     
                     settings.alarmSound = newAlarmSound;
                     settings.volume = newVolume;
                     settings.enableNotifications = newEnableNotifications;
                     settings.updateInterval = newUpdateInterval;
-                    settings.enableOfflineMaps = newEnableOfflineMaps;
                     
                     sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
                     updateAlarmSound();
@@ -580,11 +548,6 @@
                     // Update background updates interval
                     if (isAlarmActive) {
                         startBackgroundUpdates();
-                    }
-
-                    // Update offline map settings
-                    if (newEnableOfflineMaps !== settings.enableOfflineMaps) {
-                        location.reload(); // Reload the page to apply offline map changes
                     }
                 }
                 showAlert('Settings saved successfully!', 'success');
@@ -601,44 +564,16 @@
                     alarmSound: 'default', 
                     volume: 0.5, 
                     enableNotifications: true,
-                    updateInterval: 5,
-                    enableOfflineMaps: false
+                    updateInterval: 5
                 };
                 document.getElementById('alarmSound').value = 'default';
                 document.getElementById('volume').value = '0.5';
                 document.getElementById('enableNotifications').checked = true;
                 document.getElementById('updateInterval').value = '5';
-                document.getElementById('enableOfflineMaps').checked = false;
                 document.getElementById('destination').value = '';
                 document.getElementById('radius').value = '1000';
                 updateAlarmSound();
                 showAlert('Session reset successfully!', 'success');
-            });
-
-            document.getElementById('enableOfflineMaps').addEventListener('change', (e) => {
-                document.getElementById('offlineMapControls').style.display = e.target.checked ? 'block' : 'none';
-            });
-
-            document.getElementById('downloadOfflineMap').addEventListener('click', async () => {
-                if (!offlineLayer) {
-                    showAlert('Offline maps are not enabled. Please enable them in settings first.', 'error');
-                    return;
-                }
-
-                const bounds = map.getBounds();
-                const zoom = map.getZoom();
-                const statusElement = document.getElementById('offlineMapStatus');
-
-                statusElement.textContent = 'Downloading offline map...';
-                try {
-                    await offlineLayer.saveTiles(bounds, zoom, zoom + 2, (progress) => {
-                        statusElement.textContent = `Downloading: ${Math.round(progress.percentage)}%`;
-                    });
-                    statusElement.textContent = 'Offline map downloaded successfully!';
-                } catch (error) {
-                    console.error('Error downloading offline map:', error);
-                    statusElement.textContent = 'Error downloading offline map. Please try again.';
-                }
             });
 
             // Load saved settings
