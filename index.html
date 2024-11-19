@@ -33,22 +33,41 @@
         #alertPopup {
             z-index: 1000;
         }
-        @media (prefers-color-scheme: dark) {
-          .notification {
-            background: #1a1a1a;
-            color: white;
-          }
-          .notification-progress {
-            background: rgba(255, 255, 255, 0.1);
-          }
-          .notification-progress-bar {
-            background: #00b14f;
-          }
+        .loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #10B981;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
     </style>
 </head>
 <body class="bg-gray-100">
-    <div id="app" class="max-w-md mx-auto bg-white shadow-lg overflow-hidden min-h-screen">
+    <div id="loadingScreen" class="loading-screen">
+        <div class="text-center">
+            <div class="spinner mx-auto mb-4"></div>
+            <p class="text-lg font-semibold text-gray-700">Loading OpenTravel...</p>
+        </div>
+    </div>
+
+    <div id="app" class="max-w-md mx-auto bg-white shadow-lg overflow-hidden min-h-screen hidden">
         <div class="bg-green-500 text-white p-4 flex justify-between items-center">
             <h1 class="text-2xl font-bold">OpenTravel</h1>
             <button id="settingsBtn" class="p-2 rounded-full hover:bg-green-600 transition duration-300">
@@ -107,13 +126,13 @@
             </div>
             <div class="mb-4">
                 <label class="flex items-center">
-                    <input type="checkbox" id="enableNotifications" class="form-checkbox h-5 w-5 text-green-600" checked>
+                    <input type="checkbox" id="enableNotifications" class="form-checkbox h-5 w-5 text-green-600">
                     <span class="ml-2 text-sm text-gray-700">Enable Notifications</span>
                 </label>
             </div>
             <div class="mb-4">
-                <label for="updateInterval" class="block text-sm font-medium text-gray-700 mb-1">Update Interval (seconds)</label>
-                <input type="number" id="updateInterval" class="w-full p-3 border border-gray-300 rounded-full focus:ring-green-500 focus:border-green-500" value="30" min="10" max="300">
+                <label for="updateInterval" class="block text-sm font-medium text-gray-700 mb-1">Background Update Interval (minutes)</label>
+                <input type="number" id="updateInterval" class="w-full p-3 border border-gray-300 rounded-full focus:ring-green-500 focus:border-green-500" value="5" min="1" max="60">
             </div>
             <button id="saveSettings" class="w-full bg-green-500 text-white p-3 rounded-lg hover:bg-green-600 transition duration-300">
                 Save Settings
@@ -150,7 +169,7 @@
             alarmSound: 'default',
             volume: 0.5,
             enableNotifications: true,
-            updateInterval: 30
+            updateInterval: 5
         };
         
         // Initialize map
@@ -161,112 +180,59 @@
             }).addTo(map);
         }
 
-        // Play alarm
-        function playAlarm() {
-            if (!isAlarmPlaying) {
-                const audio = document.getElementById('alarmAudio');
-                audio.volume = settings.volume;
-                audio.play();
-                isAlarmPlaying = true;
-                console.log('Playing alarm sound');
-                
-                document.getElementById('stopAlarm').classList.remove('hidden');
-                document.getElementById('setAlarm').classList.add('hidden');
-                
-                // Vibrate if supported
-                if ('vibrate' in navigator) {
-                    navigator.vibrate([200, 100, 200]);
-                }
+        // Check and request permissions
+        async function checkAndRequestPermissions() {
+            let geolocationPermission = false;
+            let notificationPermission = false;
 
-                // Show notification
-                showNotification('OpenTravel Alarm', 'You have reached your destination!');
-            }
-        }
-
-        // Stop alarm
-        function stopAlarm() {
-            const audio = document.getElementById('alarmAudio');
-            audio.pause();
-            audio.currentTime = 0;
-            isAlarmPlaying = false;
-            isAlarmActive = false;
-            document.getElementById('stopAlarm').classList.add('hidden');
-            document.getElementById('setAlarm').classList.remove('hidden');
-            showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
-            
-            // Stop background sync
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.ready.then(registration => {
-                    registration.sync.unregister('alarm-sync');
-                });
-            }
-
-            // Clear background interval
-            if (backgroundInterval) {
-                clearInterval(backgroundInterval);
-            }
-        }
-
-        // Update user location
-        function updateLocation(position) {
-            const { latitude, longitude } = position.coords;
-            
-            if (!userMarker) {
-                userMarker = L.marker([latitude, longitude], {
-                    icon: L.icon({
-                        iconUrl: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                        iconSize: [30, 30],
-                        iconAnchor: [20, 20]
-                    })
-                }).addTo(map);
-                map.setView([latitude, longitude], 15);
-            } else {
-                userMarker.setLatLng([latitude, longitude]);
-            }
-
-            if (destination && isAlarmActive) {
-                const distance = map.distance([latitude, longitude], destination);
-                const progress = calculateProgress(distance);
-                updateDistanceDisplay(distance, progress);
-                
-                if (distance <= alarmRadius && !isAlarmPlaying) {
-                    playAlarm();
-                    document.getElementById('status').textContent = 'You have reached your destination!';
-                    document.getElementById('status').classList.add('text-green-600', 'font-semibold');
+            // Check geolocation permission
+            if ('geolocation' in navigator) {
+                try {
+                    await new Promise((resolve, reject) => {
+                        navigator.geolocation.getCurrentPosition(resolve, reject);
+                    });
+                    geolocationPermission = true;
+                } catch (error) {
+                    console.error('Geolocation permission denied:', error);
                 }
             }
-        }
 
-        // Calculate progress
-        function calculateProgress(currentDistance) {
-            const totalDistance = map.distance(userMarker.getLatLng(), destination);
-            return Math.max(0, Math.min(100, ((totalDistance - currentDistance) / totalDistance) * 100));
-        }
-
-        // Update distance display
-        function updateDistanceDisplay(distance, progress) {
-            const distanceText = `Distance: ${formatNumber(Math.round(distance))} meters`;
-            document.getElementById('distance').textContent = distanceText;
-            
-            // Update notification if enabled
-            if (settings.enableNotifications) {
-                showProgressNotification('OpenTravel Progress', distanceText, progress);
+            // Check notification permission
+            if ('Notification' in window) {
+                if (Notification.permission === 'granted') {
+                    notificationPermission = true;
+                } else if (Notification.permission !== 'denied') {
+                    const permission = await Notification.requestPermission();
+                    notificationPermission = permission === 'granted';
+                }
             }
-        }
 
-        // Format number with commas
-        function formatNumber(num) {
-            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            return { geolocationPermission, notificationPermission };
         }
 
         // Set alarm
-        function setAlarm() {
+        async function setAlarm() {
+            const { geolocationPermission, notificationPermission } = await checkAndRequestPermissions();
+
+            if (!geolocationPermission) {
+                showAlert('Geolocation permission is required to set the alarm. Please enable it in your browser settings.', 'error');
+                return;
+            }
+
+            if (!notificationPermission && settings.enableNotifications) {
+                showAlert('Notification permission is recommended for better experience. You can enable it in your browser settings.', 'info');
+            }
+
             const destinationInput = document.getElementById('destination').value;
             alarmRadius = parseInt(document.getElementById('radius').value);
 
             if (!destinationInput) {
                 showAlert('Please enter a destination', 'error');
                 return;
+            }
+
+            if (isMobileDevice()) {
+                showAlert('On mobile devices, notifications may not work when the app is in the background. Keep the app open for best results.', 'info');
             }
 
             fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destinationInput)}, Philippines`)
@@ -342,47 +308,120 @@
                 });
         }
 
-        // Show notification
-        function showNotification(title, body) {
-            if ("Notification" in window) {
-                if (Notification.permission === "granted") {
-                    sendNotification(title, body);
-                } else if (Notification.permission !== "denied") {
-                    Notification.requestPermission().then(permission => {
-                        if (permission === "granted") {
-                            sendNotification(title, body);
-                        }
-                    });
+        // Play alarm
+        function playAlarm() {
+            if (!isAlarmPlaying) {
+                const audio = document.getElementById('alarmAudio');
+                audio.volume = settings.volume;
+                audio.play();
+                isAlarmPlaying = true;
+                console.log('Playing alarm sound');
+                
+                document.getElementById('stopAlarm').classList.remove('hidden');
+                document.getElementById('setAlarm').classList.add('hidden');
+                
+                // Vibrate if supported
+                if ('vibrate' in navigator) {
+                    navigator.vibrate([200, 100, 200]);
                 }
+
+                // Show notification
+                showNotification('OpenTravel Alarm', 'You have reached your destination!');
+            }
+        }
+
+        // Stop alarm
+        function stopAlarm() {
+            const audio = document.getElementById('alarmAudio');
+            audio.pause();
+            audio.currentTime = 0;
+            isAlarmPlaying = false;
+            isAlarmActive = false;
+            document.getElementById('stopAlarm').classList.add('hidden');
+            document.getElementById('setAlarm').classList.remove('hidden');
+            showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
+            
+            // Stop background sync
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.sync.unregister('alarm-sync');
+                });
             }
 
-            // For iOS Safari when in standalone mode (PWA)
-            if (window.navigator.standalone) {
-                // Use local notification
-                if ("Notification" in window) {
-                    new Notification(title, { body: body });
+            // Clear background interval
+            if (backgroundInterval) {
+                clearInterval(backgroundInterval);
+            }
+        }
+
+        // Update user location
+        function updateLocation(position) {
+            const { latitude, longitude } = position.coords;
+            
+            if (!userMarker) {
+                userMarker = L.marker([latitude, longitude], {
+                    icon: L.icon({
+                        iconUrl: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                        iconSize: [30, 30],
+                        iconAnchor: [20, 20]
+                    })
+                }).addTo(map);
+                map.setView([latitude, longitude], 15);
+            } else {
+                userMarker.setLatLng([latitude, longitude]);
+            }
+
+            if (destination && isAlarmActive) {
+                const distance = map.distance([latitude, longitude], destination);
+                updateDistanceDisplay(distance);
+                
+                if (distance <= alarmRadius && !isAlarmPlaying) {
+                    playAlarm();
+                    document.getElementById('status').textContent = 'You have reached your destination!';
+                    document.getElementById('status').classList.add('text-green-600', 'font-semibold');
                 }
             }
         }
 
-        function showProgressNotification(title, body, progress) {
-            const options = {
-                body: body,
-                icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                tag: 'opentravel-update',
-                renotify: true,
-                data: {
-                    progress: progress
-                }
-            };
+        // Update distance display
+        function updateDistanceDisplay(distance) {
+            const distanceText = `Distance: ${formatNumber(Math.round(distance))} meters`;
+            document.getElementById('distance').textContent = distanceText;
+            
+            // Update notification if enabled
+            if (settings.enableNotifications) {
+                showNotification('OpenTravel Distance Update', distanceText);
+            }
+        }
 
-            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.ready.then(registration => {
-                    registration.showNotification(title, options);
-                });
+        // Format number with commas
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+
+        // Show notification
+        function showNotification(title, body) {
+            if ("Notification" in window && Notification.permission === "granted") {
+                if (navigator.userAgent.match(/Android/i)) {
+                    // For Android, use service worker to show notification
+                    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.ready.then(registration => {
+                            registration.showNotification(title, {
+                                body: body,
+                                icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                                vibrate: [200, 100, 200]
+                            });
+                        });
+                    }
+                } else {
+                    // For other platforms, use regular Notification
+                    new Notification(title, { body: body });
+                }
+            } else if (window.navigator.standalone) {
+                // For iOS when in standalone mode (PWA)
+                alert(`${title}: ${body}`);
             } else {
-                new Notification(title, options);
+                showAlert(body, 'info');
             }
         }
 
@@ -392,16 +431,22 @@
                 clearInterval(backgroundInterval);
             }
 
+            let lastUpdateTime = Date.now();
+            const minInterval = 60000; // Minimum 1 minute between updates
+
             backgroundInterval = setInterval(() => {
-                if (document.hidden) {
+                const now = Date.now();
+                if (document.hidden && now - lastUpdateTime >= minInterval) {
                     checkLocationAndNotify();
+                    lastUpdateTime = now;
                 }
-            }, settings.updateInterval * 1000); // Convert seconds to milliseconds
+            }, 10000); // Check every 10 seconds, but only update if enough time has passed
 
             // Listen for visibility changes
             document.addEventListener("visibilitychange", function() {
-                if (document.hidden) {
+                if (!document.hidden) {
                     checkLocationAndNotify();
+                    lastUpdateTime = Date.now();
                 }
             });
         }
@@ -411,9 +456,8 @@
             navigator.geolocation.getCurrentPosition(
                 position => {
                     const distance = calculateDistance(position.coords, {latitude: destination[0], longitude: destination[1]});
-                    const progress = calculateProgress(distance);
                     const formattedDistance = formatDistance(distance);
-                    showProgressNotification('OpenTravel Progress', `Current distance: ${formattedDistance}`, progress);
+                    showNotification('OpenTravel Distance Update', `Current distance to destination: ${formattedDistance}`);
                 },
                 error => {
                     console.error('Error getting location:', error);
@@ -423,31 +467,17 @@
 
         // Send initial notification
         function sendInitialNotification(destination) {
-          navigator.geolocation.getCurrentPosition(
-            position => {
-              const distance = calculateDistance(
-                position.coords, 
-                {latitude: destination[0], longitude: destination[1]}
-              );
-              if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.ready.then(registration => {
-                  registration.active.postMessage({
-                    type: 'START_BACKGROUND_UPDATES',
-                    settings: {
-                      destination: destination,
-                      radius: alarmRadius,
-                      initialDistance: distance,
-                      updateInterval: settings.updateInterval
-                    }
-                  });
-                });
-              }
-            },
-            error => {
-              console.error('Error getting initial location:', error);
-              showAlert('Unable to get initial location. Monitoring started anyway.', 'info');
-            }
-          );
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    const distance = calculateDistance(position.coords, {latitude: destination[0], longitude: destination[1]});
+                    const formattedDistance = formatDistance(distance);
+                    showNotification('OpenTravel Monitoring Started', `Initial distance to destination: ${formattedDistance}`);
+                },
+                error => {
+                    console.error('Error getting initial location:', error);
+                    showNotification('OpenTravel Monitoring Started', 'Unable to get initial distance. Monitoring started.');
+                }
+            );
         }
 
         // Calculate distance between two points
@@ -474,7 +504,7 @@
         }
 
         // Initialize the app
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             initMap();
             document.getElementById('setAlarm').addEventListener('click', setAlarm);
             document.getElementById('stopAlarm').addEventListener('click', stopAlarm);
@@ -530,12 +560,12 @@
                     alarmSound: 'default', 
                     volume: 0.5, 
                     enableNotifications: true,
-                    updateInterval: 30
+                    updateInterval: 5
                 };
                 document.getElementById('alarmSound').value = 'default';
                 document.getElementById('volume').value = '0.5';
                 document.getElementById('enableNotifications').checked = true;
-                document.getElementById('updateInterval').value = '30';
+                document.getElementById('updateInterval').value = '5';
                 document.getElementById('destination').value = '';
                 document.getElementById('radius').value = '1000';
                 updateAlarmSound();
@@ -551,27 +581,35 @@
             }
             updateAlarmSound();
 
-            // Get initial user location
-            navigator.geolocation.getCurrentPosition(
-                updateLocation,
-                error => {
-                    console.error('Error getting initial location:', error);
-                    showAlert('Unable to get your initial location. Please check your settings and try again.', 'error');
-                },
-                {
-                    enableHighAccuracy: true,
-                    maximumAge: 0,
-                    timeout: 5000
-                }
-            );
+            // Check initial permissions
+            const { geolocationPermission, notificationPermission } = await checkAndRequestPermissions();
+
+            if (!geolocationPermission) {
+                showAlert('Geolocation permission is required for this app to function properly. Please enable it in your browser settings.', 'error');
+            }
+
+            if (!notificationPermission && settings.enableNotifications) {
+                showAlert('Notifications are disabled. Enable them in your browser settings for a better experience.', 'info');
+            }
+
+            // Get initial user location if permission is granted
+            if (geolocationPermission) {
+                navigator.geolocation.getCurrentPosition(
+                    updateLocation,
+                    error => {
+                        console.error('Error getting initial location:', error);
+                        showAlert('Unable to get your initial location. Please check your settings and try again.', 'error');
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        maximumAge: 0,
+                        timeout: 5000
+                    }
+                );
+            }
 
             // Initialize Lucide icons
             lucide.createIcons();
-
-            // Request notification permission if enabled
-            if (settings.enableNotifications) {
-                Notification.requestPermission();
-            }
 
             // Register service worker
             if ('serviceWorker' in navigator) {
@@ -590,6 +628,10 @@
                     updateLocation(event.data.position);
                 }
             });
+
+            // Hide loading screen and show app
+            document.getElementById('loadingScreen').style.display = 'none';
+            document.getElementById('app').classList.remove('hidden');
         });
 
         function updateAlarmSound() {
@@ -666,6 +708,10 @@
             alertPopup.classList.add('opacity-0', '-translate-y-full');
             alertPopup.classList.remove('border-l-4', 'border-green-500', 'border-red-500', 'border-blue-500');
             document.getElementById('alertIcon').classList.remove('bg-green-100', 'bg-red-100', 'bg-blue-100');
+        }
+
+        function isMobileDevice() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         }
     </script>
 </body>
