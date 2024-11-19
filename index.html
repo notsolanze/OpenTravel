@@ -178,8 +178,8 @@
                     navigator.vibrate([200, 100, 200]);
                 }
 
-                // Show notification
-                showNotification('OpenTravel Alarm', 'You have reached your destination!');
+                // Show final notification
+                sendFinalNotification();
             }
         }
 
@@ -247,11 +247,6 @@
         function updateDistanceDisplay(distance, progress) {
             const distanceText = `Distance: ${formatNumber(Math.round(distance))} meters`;
             document.getElementById('distance').textContent = distanceText;
-            
-            // Update notification if enabled
-            if (settings.enableNotifications) {
-                showProgressNotification('OpenTravel Progress', distanceText, progress);
-            }
         }
 
         // Format number with commas
@@ -315,7 +310,7 @@
                         document.getElementById('status').classList.remove('text-green-600', 'font-semibold');
 
                         // Save alarm settings
-                        settings.destination = destinationInput;
+                settings.destination = destinationInput;
                         settings.radius = alarmRadius;
                         sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
                         isAlarmActive = true;
@@ -365,54 +360,41 @@
             }
         }
 
-        function showProgressNotification(title, body, progress) {
-            const options = {
-                body: body,
-                icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-                tag: 'opentravel-update',
-                renotify: true,
-                data: {
-                    progress: progress
-                }
-            };
-
-            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.ready.then(registration => {
-                    registration.showNotification(title, options);
-                });
-            } else {
-                new Notification(title, options);
-            }
-        }
-
         // Send initial notification
         function sendInitialNotification(destination) {
-          navigator.geolocation.getCurrentPosition(
-            position => {
-              const distance = calculateDistance(
-                position.coords, 
-                {latitude: destination[0], longitude: destination[1]}
-              );
-              if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.ready.then(registration => {
-                  registration.active.postMessage({
-                    type: 'START_BACKGROUND_UPDATES',
-                    settings: {
-                      destination: destination,
-                      radius: alarmRadius,
-                      initialDistance: distance,
-                      updateInterval: settings.updateInterval
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    const distance = calculateDistance(
+                        position.coords, 
+                        {latitude: destination[0], longitude: destination[1]}
+                    );
+                    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.ready.then(registration => {
+                            registration.active.postMessage({
+                                type: 'START_BACKGROUND_UPDATES',
+                                settings: {
+                                    destination: destination,
+                                    radius: alarmRadius,
+                                    initialDistance: distance,
+                                    updateInterval: settings.updateInterval
+                                }
+                            });
+                        });
                     }
-                  });
-                });
-              }
-            },
-            error => {
-              console.error('Error getting initial location:', error);
-              showAlert('Unable to get initial location. Monitoring started anyway.', 'info');
-            }
-          );
+                    
+                    // Send initial notification
+                    showNotification('OpenTravel Journey Started', `Your journey to ${settings.destination} has begun. Distance: ${formatDistance(distance)}`);
+                },
+                error => {
+                    console.error('Error getting initial location:', error);
+                    showAlert('Unable to get initial location. Monitoring started anyway.', 'info');
+                }
+            );
+        }
+
+        // New function to handle final notification
+        function sendFinalNotification() {
+            showNotification('OpenTravel Destination Reached', `You have arrived at ${settings.destination}!`);
         }
 
         // Calculate distance between two points
@@ -631,6 +613,12 @@
             alertPopup.classList.add('opacity-0', '-translate-y-full');
             alertPopup.classList.remove('border-l-4', 'border-green-500', 'border-red-500', 'border-blue-500');
             document.getElementById('alertIcon').classList.remove('bg-green-100', 'bg-red-100', 'bg-blue-100');
+        }
+
+        function startBackgroundUpdates() {
+            // Implementation depends on your specific requirements
+            // This is a placeholder for the background update functionality
+            console.log('Starting background updates');
         }
     </script>
 </body>
