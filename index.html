@@ -4,34 +4,137 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpenTravel</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/128/10473/10473293.png">
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css">
-    <script src="https://cdn.jsdelivr.net/npm/lucide@0.10.0/dist/lucide.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#10B981">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/128/10473/10473293.png">
+    <style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        .distance-badge {
+            position: fixed;
+            top: 75px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: white;
+            padding: 10px 10px;
+            border-radius: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        #alertPopup {
+            z-index: 1000;
+        }
+        @media (prefers-color-scheme: dark) {
+          .notification {
+            background: #1a1a1a;
+            color: white;
+          }
+          .notification-progress {
+            background: rgba(255, 255, 255, 0.1);
+          }
+          .notification-progress-bar {
+            background: #00b14f;
+          }
+        }
+    </style>
 </head>
 <body class="bg-gray-100">
-    <div id="mainPage">
-        <div class="p-4">
-            <h1 class="text-2xl font-bold mb-4">OpenTravel</h1>
-            <div id="map" class="h-64"></div>
-            <div class="mt-4">
-                <input id="destination" type="text" placeholder="Enter destination" class="border p-2 rounded w-full">
-                <input id="radius" type="number" placeholder="Alarm Radius (meters)" value="1000" class="border p-2 rounded w-full mt-2">
-                <button id="setAlarm" class="bg-blue-500 text-white px-4 py-2 rounded mt-4">Set Alarm</button>
-                <button id="stopAlarm" class="bg-red-500 text-white px-4 py-2 rounded mt-4 hidden">Stop Alarm</button>
+    <div id="app" class="max-w-md mx-auto bg-white shadow-lg overflow-hidden min-h-screen">
+        <div class="bg-green-500 text-white p-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold">OpenTravel</h1>
+            <button id="settingsBtn" class="p-2 rounded-full hover:bg-green-600 transition duration-300">
+                <i data-lucide="settings" class="w-6 h-6"></i>
+            </button>
+        </div>
+        <div id="mainPage">
+            <div id="map" class="h-[60vh]"></div>
+            <div class="p-4">
+                <div class="mb-4">
+                    <label for="destination" class="block text-sm font-medium text-gray-700 mb-1">Where are you going?</label>
+                    <input type="text" id="destination" class="w-full p-3 border border-gray-300 rounded-full focus:ring-green-500 focus:border-green-500" placeholder="Enter destination">
+                </div>
+                <div class="mb-4">
+                    <label for="radius" class="block text-sm font-medium text-gray-700 mb-1">Alarm Radius (meters)</label>
+                    <input type="number" id="radius" class="w-full p-3 border border-gray-300 rounded-full focus:ring-green-500 focus:border-green-500" value="1000">
+                </div>
+                <div class="flex justify-center space-x-4">
+                    <button id="setAlarm" class="bg-green-500 text-white p-3 rounded-full hover:bg-green-600 transition duration-300">
+                        <i data-lucide="bell" class="w-6 h-6"></i>
+                    </button>
+                    <button id="stopAlarm" class="bg-red-500 text-white p-3 rounded-full hover:bg-red-600 transition duration-300 hidden">
+                        <i data-lucide="bell-off" class="w-6 h-6"></i>
+                    </button>
+                </div>
+                <p id="status" class="mt-4 text-sm text-gray-600 text-center"></p>
             </div>
-            <div id="status" class="mt-4 text-gray-700">Awaiting destination...</div>
+        </div>
+        <div id="settingsPage" class="hidden p-4">
+            <div class="flex justify-between items-center mb-4">
+                <button id="backToMain" class="p-2 rounded-full hover:bg-gray-200 transition duration-300">
+                    <i data-lucide="arrow-left" class="w-6 h-6"></i>
+                </button>
+                <h2 class="text-xl font-bold">Alarm Settings</h2>
+                <button id="resetSession" class="p-2 rounded-full hover:bg-gray-200 transition duration-300">
+                    <i data-lucide="refresh-cw" class="w-6 h-6"></i>
+                </button>
+            </div>
+            <div class="mb-4">
+                <label for="alarmSound" class="block text-sm font-medium text-gray-700 mb-1">Alarm Sound</label>
+                <select id="alarmSound" class="w-full p-3 border border-gray-300 rounded-full focus:ring-green-500 focus:border-green-500">
+                    <option value="default">Default</option>
+                    <option value="chimes">Chimes</option>
+                    <option value="radar">Radar</option>
+                    <option value="beacon">Beacon</option>
+                    <option value="signal">Signal</option>
+                    <option value="bells">Bells</option>
+                    <option value="digital">Digital</option>
+                    <option value="alarm">Classic Alarm</option>
+                    <option value="siren">Siren</option>
+                </select>
+            </div>
+            <div class="mb-4">
+                <label for="volume" class="block text-sm font-medium text-gray-700 mb-1">Alarm Volume</label>
+                <input type="range" id="volume" min="0" max="1" step="0.1" value="0.5" class="w-full">
+            </div>
+            <div class="mb-4">
+                <label class="flex items-center">
+                    <input type="checkbox" id="enableNotifications" class="form-checkbox h-5 w-5 text-green-600" checked>
+                    <span class="ml-2 text-sm text-gray-700">Enable Notifications</span>
+                </label>
+            </div>
+            <div class="mb-4">
+                <label for="updateInterval" class="block text-sm font-medium text-gray-700 mb-1">Update Interval (seconds)</label>
+                <input type="number" id="updateInterval" class="w-full p-3 border border-gray-300 rounded-full focus:ring-green-500 focus:border-green-500" value="30" min="10" max="300">
+            </div>
+            <button id="saveSettings" class="w-full bg-green-500 text-white p-3 rounded-lg hover:bg-green-600 transition duration-300">
+                Save Settings
+            </button>
         </div>
     </div>
-
-    <audio id="alarmAudio"></audio>
-
-    <!-- Alert Popup -->
-    <div id="alertPopup" class="fixed top-4 right-4 bg-white shadow-lg rounded-lg p-4 opacity-0 transform -translate-y-full transition">
-        <div id="alertIcon" class="rounded-full p-2 inline-block"></div>
-        <div class="ml-3 inline-block">
-            <div id="alertTitle" class="font-bold"></div>
-            <div id="alertMessage"></div>
+    <div id="distance" class="distance-badge text-sm font-semibold text-green-600"></div>
+    <audio id="alarmAudio" loop>
+        <source src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+    <div id="alertPopup" class="fixed top-4 left-1/2 transform -translate-x-1/2 bg-white rounded-lg shadow-lg p-4 transition-all duration-300 ease-in-out opacity-0 -translate-y-full max-w-sm w-full mx-4">
+        <div class="flex items-center gap-3">
+            <div id="alertIcon" class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"></div>
+            <div class="flex-1">
+                <h3 id="alertTitle" class="font-semibold text-gray-900"></h3>
+                <p id="alertMessage" class="text-gray-600 text-sm"></p>
+            </div>
+            <button onclick="hideAlert()" class="flex-shrink-0 text-gray-400 hover:text-gray-500">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
         </div>
     </div>
 
@@ -40,17 +143,19 @@
         let watchId, destination, alarmRadius;
         let isAlarmPlaying = false;
         let isAlarmActive = false;
+        let backgroundInterval;
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
             alarmSound: 'default',
             volume: 0.5,
             enableNotifications: true,
+            updateInterval: 30
         };
-
+        
         // Initialize map
         function initMap() {
-            map = L.map('map').setView([14.5995, 120.9842], 11);
+            map = L.map('map').setView([14.5995, 120.9842], 11); // Manila coordinates
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenTravel'
             }).addTo(map);
@@ -63,17 +168,18 @@
                 audio.volume = settings.volume;
                 audio.play();
                 isAlarmPlaying = true;
-
+                console.log('Playing alarm sound');
+                
                 document.getElementById('stopAlarm').classList.remove('hidden');
                 document.getElementById('setAlarm').classList.add('hidden');
-
+                
+                // Vibrate if supported
                 if ('vibrate' in navigator) {
                     navigator.vibrate([200, 100, 200]);
                 }
 
-                if (settings.enableNotifications) {
-                    showNotification('OpenTravel Alarm', 'You have reached your destination!');
-                }
+                // Show notification
+                showNotification('OpenTravel Alarm', 'You have reached your destination!');
             }
         }
 
@@ -84,20 +190,35 @@
             audio.currentTime = 0;
             isAlarmPlaying = false;
             isAlarmActive = false;
-
             document.getElementById('stopAlarm').classList.add('hidden');
             document.getElementById('setAlarm').classList.remove('hidden');
             showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
+            
+            // Stop background sync
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.sync.unregister('alarm-sync');
+                });
+            }
 
-            if (watchId) navigator.geolocation.clearWatch(watchId);
+            // Clear background interval
+            if (backgroundInterval) {
+                clearInterval(backgroundInterval);
+            }
         }
 
         // Update user location
         function updateLocation(position) {
             const { latitude, longitude } = position.coords;
-
+            
             if (!userMarker) {
-                userMarker = L.marker([latitude, longitude]).addTo(map);
+                userMarker = L.marker([latitude, longitude], {
+                    icon: L.icon({
+                        iconUrl: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                        iconSize: [30, 30],
+                        iconAnchor: [20, 20]
+                    })
+                }).addTo(map);
                 map.setView([latitude, longitude], 15);
             } else {
                 userMarker.setLatLng([latitude, longitude]);
@@ -105,12 +226,37 @@
 
             if (destination && isAlarmActive) {
                 const distance = map.distance([latitude, longitude], destination);
-
-                document.getElementById('status').textContent = `Distance: ${Math.round(distance)} meters`;
+                const progress = calculateProgress(distance);
+                updateDistanceDisplay(distance, progress);
+                
                 if (distance <= alarmRadius && !isAlarmPlaying) {
                     playAlarm();
+                    document.getElementById('status').textContent = 'You have reached your destination!';
+                    document.getElementById('status').classList.add('text-green-600', 'font-semibold');
                 }
             }
+        }
+
+        // Calculate progress
+        function calculateProgress(currentDistance) {
+            const totalDistance = map.distance(userMarker.getLatLng(), destination);
+            return Math.max(0, Math.min(100, ((totalDistance - currentDistance) / totalDistance) * 100));
+        }
+
+        // Update distance display
+        function updateDistanceDisplay(distance, progress) {
+            const distanceText = `Distance: ${formatNumber(Math.round(distance))} meters`;
+            document.getElementById('distance').textContent = distanceText;
+            
+            // Update notification if enabled
+            if (settings.enableNotifications) {
+                showProgressNotification('OpenTravel Progress', distanceText, progress);
+            }
+        }
+
+        // Format number with commas
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
         }
 
         // Set alarm
@@ -128,60 +274,168 @@
                 .then(data => {
                     if (data.length > 0) {
                         destination = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-
+                        
                         if (destinationMarker) map.removeLayer(destinationMarker);
                         if (circle) map.removeLayer(circle);
-
-                        destinationMarker = L.marker(destination).addTo(map);
+                        
+                        destinationMarker = L.marker(destination, {
+                            icon: L.divIcon({
+                                className: 'bg-green-500 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center',
+                                html: '<span class="text-white text-xs">📍</span>',
+                                iconSize: [24, 24]
+                            })
+                        }).addTo(map);
+                        
                         circle = L.circle(destination, { 
                             radius: alarmRadius,
                             color: 'green',
                             fillColor: '#3ce03c',
                             fillOpacity: 0.2
                         }).addTo(map);
-
+                        
                         map.fitBounds(circle.getBounds());
 
-                        if (watchId) navigator.geolocation.clearWatch(watchId);
+                        if (watchId) {
+                            navigator.geolocation.clearWatch(watchId);
+                        }
 
-                        watchId = navigator.geolocation.watchPosition(updateLocation, error => {
-                            console.error('Error getting location:', error);
-                            showAlert('Unable to get your location. Please check your settings and try again.', 'error');
-                        }, {
-                            enableHighAccuracy: true,
-                            maximumAge: 0,
-                            timeout: 5000
-                        });
+                        watchId = navigator.geolocation.watchPosition(updateLocation, 
+                            error => {
+                                console.error('Error getting location:', error);
+                                showAlert('Unable to get your location. Please check your settings and try again.', 'error');
+                            },
+                            {
+                                enableHighAccuracy: true,
+                                maximumAge: 0,
+                                timeout: 5000
+                            }
+                        );
 
-                        isAlarmActive = true;
                         document.getElementById('status').textContent = 'Alarm set. Monitoring location...';
+                        document.getElementById('status').classList.remove('text-green-600', 'font-semibold');
+
+                        // Save alarm settings
+                        settings.destination = destinationInput;
+                        settings.radius = alarmRadius;
+                        sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
+                        isAlarmActive = true;
+
+                        // Register for background sync
+                        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                            navigator.serviceWorker.ready.then(function(reg) {
+                                return reg.sync.register('alarm-sync');
+                            }).catch(function(err) {
+                                console.log('Background sync failed:', err);
+                            });
+                        }
+
+                        // Start background updates and send initial notification
+                        startBackgroundUpdates();
+                        sendInitialNotification(destination);
                     } else {
-                        showAlert('Destination not found. Please try again.', 'error');
+                        showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
+                    console.error('Error geocoding destination:', error);
                     showAlert('Error finding destination. Please try again.', 'error');
                 });
         }
 
         // Show notification
         function showNotification(title, body) {
-            if ("Notification" in window && Notification.permission === "granted") {
-                new Notification(title, { body });
+            if ("Notification" in window) {
+                if (Notification.permission === "granted") {
+                    sendNotification(title, body);
+                } else if (Notification.permission !== "denied") {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === "granted") {
+                            sendNotification(title, body);
+                        }
+                    });
+                }
+            }
+
+            // For iOS Safari when in standalone mode (PWA)
+            if (window.navigator.standalone) {
+                // Use local notification
+                if ("Notification" in window) {
+                    new Notification(title, { body: body });
+                }
             }
         }
 
-        // Show alert popup
-        function showAlert(message, type = 'error') {
-            const alertPopup = document.getElementById('alertPopup');
-            const alertMessage = document.getElementById('alertMessage');
-            alertMessage.textContent = message;
-            alertPopup.classList.add('opacity-100', 'translate-y-0');
+        function showProgressNotification(title, body, progress) {
+            const options = {
+                body: body,
+                icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+                tag: 'opentravel-update',
+                renotify: true,
+                data: {
+                    progress: progress
+                }
+            };
 
-            setTimeout(() => {
-                alertPopup.classList.remove('opacity-100', 'translate-y-0');
-            }, 3000);
+            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.showNotification(title, options);
+                });
+            } else {
+                new Notification(title, options);
+            }
+        }
+
+        // Send initial notification
+        function sendInitialNotification(destination) {
+          navigator.geolocation.getCurrentPosition(
+            position => {
+              const distance = calculateDistance(
+                position.coords, 
+                {latitude: destination[0], longitude: destination[1]}
+              );
+              if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.ready.then(registration => {
+                  registration.active.postMessage({
+                    type: 'START_BACKGROUND_UPDATES',
+                    settings: {
+                      destination: destination,
+                      radius: alarmRadius,
+                      initialDistance: distance,
+                      updateInterval: settings.updateInterval
+                    }
+                  });
+                });
+              }
+            },
+            error => {
+              console.error('Error getting initial location:', error);
+              showAlert('Unable to get initial location. Monitoring started anyway.', 'info');
+            }
+          );
+        }
+
+        // Calculate distance between two points
+        function calculateDistance(point1, point2) {
+            const R = 6371e3; // Earth's radius in meters
+            const φ1 = point1.latitude * Math.PI/180;
+            const φ2 = point2.latitude * Math.PI/180;
+            const Δφ = (point2.latitude - point1.latitude) * Math.PI/180;
+            const Δλ = (point2.longitude - point1.longitude) * Math.PI/180;
+
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                        Math.cos(φ1) * Math.cos(φ2) *
+                        Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+            return R * c; // Distance in meters
+        }
+
+        // Format distance
+        function formatDistance(meters) {
+            return meters > 1000 
+                ? `${(meters/1000).toFixed(1)} km` 
+                : `${Math.round(meters)} m`;
         }
 
         // Initialize the app
@@ -190,10 +444,194 @@
             document.getElementById('setAlarm').addEventListener('click', setAlarm);
             document.getElementById('stopAlarm').addEventListener('click', stopAlarm);
 
-            if (settings.enableNotifications && Notification.permission !== "granted") {
+            document.getElementById('settingsBtn').addEventListener('click', () => {
+                document.getElementById('mainPage').classList.add('hidden');
+                document.getElementById('settingsPage').classList.remove('hidden');
+                document.getElementById('alarmSound').value = settings.alarmSound;
+                document.getElementById('volume').value = settings.volume;
+                document.getElementById('enableNotifications').checked = settings.enableNotifications;
+                document.getElementById('updateInterval').value = settings.updateInterval;
+            });
+
+            document.getElementById('saveSettings').addEventListener('click', () => {
+                const newAlarmSound = document.getElementById('alarmSound').value;
+                const newVolume = parseFloat(document.getElementById('volume').value);
+                const newEnableNotifications = document.getElementById('enableNotifications').checked;
+                const newUpdateInterval = parseInt(document.getElementById('updateInterval').value);
+                
+                if (newAlarmSound !== settings.alarmSound || 
+                    newVolume !== settings.volume || 
+                    newEnableNotifications !== settings.enableNotifications ||
+                    newUpdateInterval !== settings.updateInterval) {
+                    
+                    settings.alarmSound = newAlarmSound;
+                    settings.volume = newVolume;
+                    settings.enableNotifications = newEnableNotifications;
+                    settings.updateInterval = newUpdateInterval;
+                    
+                    sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
+                    updateAlarmSound();
+                    
+                    if (newEnableNotifications && Notification.permission !== "granted") {
+                        Notification.requestPermission();
+                    }
+
+                    // Update background updates interval
+                    if (isAlarmActive) {
+                        startBackgroundUpdates();
+                    }
+                }
+                showAlert('Settings saved successfully!', 'success');
+            });
+
+            document.getElementById('backToMain').addEventListener('click', () => {
+                document.getElementById('settingsPage').classList.add('hidden');
+                document.getElementById('mainPage').classList.remove('hidden');
+            });
+
+            document.getElementById('resetSession').addEventListener('click', () => {
+                sessionStorage.removeItem('alarmSettings');
+                settings = { 
+                    alarmSound: 'default', 
+                    volume: 0.5, 
+                    enableNotifications: true,
+                    updateInterval: 30
+                };
+                document.getElementById('alarmSound').value = 'default';
+                document.getElementById('volume').value = '0.5';
+                document.getElementById('enableNotifications').checked = true;
+                document.getElementById('updateInterval').value = '30';
+                document.getElementById('destination').value = '';
+                document.getElementById('radius').value = '1000';
+                updateAlarmSound();
+                showAlert('Session reset successfully!', 'success');
+            });
+
+            // Load saved settings
+            if (settings.destination) {
+                document.getElementById('destination').value = settings.destination;
+            }
+            if (settings.radius) {
+                document.getElementById('radius').value = settings.radius;
+            }
+            updateAlarmSound();
+
+            // Get initial user location
+            navigator.geolocation.getCurrentPosition(
+                updateLocation,
+                error => {
+                    console.error('Error getting initial location:', error);
+                    showAlert('Unable to get your initial location. Please check your settings and try again.', 'error');
+                },
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 5000
+                }
+            );
+
+            // Initialize Lucide icons
+            lucide.createIcons();
+
+            // Request notification permission if enabled
+            if (settings.enableNotifications) {
                 Notification.requestPermission();
             }
+
+            // Register service worker
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/service-worker.js')
+                    .then(registration => {
+                        console.log('Service Worker registered with scope:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.error('Service Worker registration failed:', error);
+                    });
+            }
+
+            // Listen for messages from the service worker
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                if (event.data && event.data.type === 'LOCATION_UPDATE') {
+                    updateLocation(event.data.position);
+                }
+            });
         });
+
+        function updateAlarmSound() {
+            const audio = document.getElementById('alarmAudio');
+            switch (settings.alarmSound) {
+                case 'chimes':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3';
+                    break;
+                case 'radar':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2569/2569-preview.mp3';
+                    break;
+                case 'beacon':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2570/2570-preview.mp3';
+                    break;
+                case 'signal':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2908/2908-preview.mp3';
+                    break;
+                case 'bells':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2910/2910-preview.mp3';
+                    break;
+                case 'digital':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2573/2573-preview.mp3';
+                    break;
+                case 'alarm':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2574/2574-preview.mp3';
+                    break;
+                case 'siren':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2575/2575-preview.mp3';
+                    break;
+                default:
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3';
+            }
+            audio.volume = settings.volume;
+        }
+
+        function showAlert(message, type = 'error') {
+            const alertPopup = document.getElementById('alertPopup');
+            const alertMessage = document.getElementById('alertMessage');
+            const alertTitle = document.getElementById('alertTitle');
+            const alertIcon = document.getElementById('alertIcon');
+            
+            if (type === 'success') {
+                alertPopup.classList.add('border-l-4', 'border-green-500');
+                alertIcon.classList.add('bg-green-100');
+                alertIcon.innerHTML = '<i data-lucide="check" class="w-5 h-5 text-green-500"></i>';
+                alertTitle.textContent = 'Success!';
+            } else if (type === 'info') {
+                alertPopup.classList.add('border-l-4', 'border-blue-500');
+                alertIcon.classList.add('bg-blue-100');
+                alertIcon.innerHTML = '<i data-lucide="info" class="w-5 h-5 text-blue-500"></i>';
+                alertTitle.textContent = 'Information';
+            } else {
+                alertPopup.classList.add('border-l-4', 'border-red-500');
+                alertIcon.classList.add('bg-red-100');
+                alertIcon.innerHTML = '<i data-lucide="alert-circle" class="w-5 h-5 text-red-500"></i>';
+                alertTitle.textContent = 'Oh no!';
+            }
+            
+            alertMessage.textContent = message;
+            alertPopup.classList.remove('opacity-0', '-translate-y-full');
+            alertPopup.classList.add('opacity-100', 'translate-y-0');
+            
+            // Reinitialize Lucide icons for the new alert
+            lucide.createIcons();
+            
+            setTimeout(() => {
+                hideAlert();
+            }, 3000);
+        }
+
+        function hideAlert() {
+            const alertPopup = document.getElementById('alertPopup');
+            alertPopup.classList.remove('opacity-100', 'translate-y-0');
+            alertPopup.classList.add('opacity-0', '-translate-y-full');
+            alertPopup.classList.remove('border-l-4', 'border-green-500', 'border-red-500', 'border-blue-500');
+            document.getElementById('alertIcon').classList.remove('bg-green-100', 'bg-red-100', 'bg-blue-100');
+        }
     </script>
 </body>
 </html>
