@@ -15,59 +15,93 @@ let alarmSettings = null;
 let hasStarted = false;
 let hasReached = false;
 
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(urlsToCache))
-  );
-});
-
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => response || fetch(event.request))
-  );
-});
-
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-  );
-});
-
-self.addEventListener('message', (event) => {
-  console.log('Service worker received message:', event.data);
-  if (event.data && event.data.type === 'START_JOURNEY') {
-    // Reset flags when starting new journey
-    hasStarted = false;
-    hasReached = false;
-    alarmSettings = event.data.settings;
-    startJourney();
+// Define all functions at the top level of the service worker scope
+function calculateEstimatedTime() {
+  console.log('Calculating estimated time');
+  if (!alarmSettings || !alarmSettings.initialDistance) {
+    console.error('alarmSettings or initialDistance is not set');
+    return null;
   }
-});
+  const now = new Date();
+  const speed = 50; // km/h
+  const distance = alarmSettings.initialDistance / 1000; // Convert meters to kilometers
+  const timeInHours = distance / speed;
+  const timeInMs = timeInHours * 60 * 60 * 1000;
+
+  return {
+    start: now,
+    end: new Date(now.getTime() + timeInMs)
+  };
+}
+
+function formatTime(date) {
+  return date.toLocaleTimeString('en-US', { 
+    hour: 'numeric', 
+    minute: '2-digit',
+    hour12: true 
+  });
+}
+
+function showNotification(type, estimatedArrival = null) {
+  console.log('Service worker attempting to show notification:', type);
+  
+  // Close any existing notifications first
+  self.registration.getNotifications().then(notifications => {
+    notifications.forEach(notification => notification.close());
+  });
+
+  let title, body, options;
+
+  if (type === 'start') {
+    title = 'Journey Started';
+    body = estimatedArrival ? `Estimated arrival by ${formatTime(estimatedArrival)}` : 'Journey started';
+    options = {
+      body,
+      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+      tag: 'opentravel-journey', // Use same tag to prevent duplicates
+      renotify: false,
+      requireInteraction: true,
+      silent: false
+    };
+  } else {
+    title = 'Destination Reached';
+    body = 'You have arrived at your destination!';
+    options = {
+      body,
+      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+      tag: 'opentravel-journey',
+      requireInteraction: true,
+      vibrate: [200, 100, 200]
+    };
+  }
+
+  self.registration.showNotification(title, options)
+    .then(() => console.log('Service worker: Notification shown successfully'))
+    .catch(error => console.error('Service worker: Error showing notification:', error));
+}
 
 function startJourney() {
-  if (!alarmSettings || hasStarted) return;
+  console.log('Starting journey function called');
+  if (!alarmSettings || hasStarted) {
+    console.log('Journey not started: alarmSettings not set or journey already started');
+    return;
+  }
   
   console.log('Starting journey:', alarmSettings);
   
   // Send only the initial notification
   const estimatedTime = calculateEstimatedTime();
-  showNotification('start', estimatedTime.end);
-  hasStarted = true;
+  if (estimatedTime) {
+    showNotification('start', estimatedTime.end);
+    hasStarted = true;
 
-  // Only check location, don't send notifications for updates
-  setInterval(() => {
-    checkLocation();
-  }, alarmSettings.updateInterval * 1000);
+    // Only check location, don't send notifications for updates
+    setInterval(() => {
+      checkLocation();
+    }, alarmSettings.updateInterval * 1000);
+  } else {
+    console.error('Failed to calculate estimated time');
+  }
 }
 
 async function checkLocation() {
@@ -116,64 +150,44 @@ function calculateDistance(point1, point2) {
   return R * c;
 }
 
-function showNotification(type, estimatedArrival = null) {
-  console.log('Service worker attempting to show notification:', type);
-  
-  // Close any existing notifications first
-  self.registration.getNotifications().then(notifications => {
-    notifications.forEach(notification => notification.close());
-  });
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(urlsToCache))
+  );
+});
 
-  let title, body, options;
+self.addEventListener('fetch', (event) => {
+  event.respondWith(
+    caches.match(event.request)
+      .then((response) => response || fetch(event.request))
+  );
+});
 
-  if (type === 'start') {
-    title = 'Journey Started';
-    body = `Estimated arrival by ${formatTime(estimatedArrival)}`;
-    options = {
-      body,
-      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-      tag: 'opentravel-journey', // Use same tag to prevent duplicates
-      renotify: false,
-      requireInteraction: true,
-      silent: false
-    };
-  } else {
-    title = 'Destination Reached';
-    body = 'You have arrived at your destination!';
-    options = {
-      body,
-      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-      tag: 'opentravel-journey',
-      requireInteraction: true,
-      vibrate: [200, 100, 200]
-    };
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    })
+  );
+});
+
+self.addEventListener('message', (event) => {
+  console.log('Service worker received message:', event.data);
+  if (event.data && event.data.type === 'START_JOURNEY') {
+    // Reset flags when starting new journey
+    hasStarted = false;
+    hasReached = false;
+    alarmSettings = event.data.settings;
+    startJourney();
   }
-
-  self.registration.showNotification(title, options)
-    .then(() => console.log('Service worker: Notification shown successfully'))
-    .catch(error => console.error('Service worker: Error showing notification:', error));
-}
-
-function calculateEstimatedTime() {
-  const now = new Date();
-  const speed = 50; // km/h
-  const distance = alarmSettings.initialDistance / 1000; // Convert meters to kilometers
-  const timeInHours = distance / speed;
-  const timeInMs = timeInHours * 60 * 60 * 1000;
-
-  return {
-    start: now,
-    end: new Date(now.getTime() + timeInMs)
-  };
-}
-
-function formatTime(date) {
-  return date.toLocaleTimeString('en-US', { 
-    hour: 'numeric', 
-    minute: '2-digit',
-    hour12: true 
-  });
-}
+});
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
@@ -187,3 +201,5 @@ self.addEventListener('sync', (event) => {
     event.waitUntil(checkLocation());
   }
 });
+
+console.log('Service worker file loaded');
