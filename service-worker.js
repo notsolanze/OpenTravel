@@ -39,146 +39,191 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-let alarmSettings = null;
-let notificationId = null;
+// Active journey tracking
+let journeyData = null;
+let activeNotificationTag = 'opentravel-journey';
+let initialDistance = 0;
 
+// Listen for messages from the main app
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'START_JOURNEY') {
-    alarmSettings = event.data.settings;
+    // Store journey data
+    journeyData = event.data.journeyData;
+    initialDistance = journeyData.initialDistance;
+    
+    // Start the journey with initial notification
     startJourney();
+  } else if (event.data && event.data.type === 'UPDATE_LOCATION') {
+    // Update the notification with new location data
+    if (journeyData) {
+      updateJourneyProgress(event.data.location, event.data.distance);
+    }
+  } else if (event.data && event.data.type === 'STOP_JOURNEY') {
+    // Clear journey data
+    journeyData = null;
+    // Close any active notifications
+    self.registration.getNotifications({ tag: activeNotificationTag })
+      .then(notifications => {
+        notifications.forEach(notification => notification.close());
+      });
   }
 });
 
+// Start journey and show initial notification
 function startJourney() {
-  if (alarmSettings) {
-    const estimatedTime = calculateEstimatedTime();
-    sendStatusNotification('start', estimatedTime);
-    setInterval(() => {
-      checkLocation();
-    }, alarmSettings.updateInterval * 1000);
-  }
-}
-
-async function checkLocation() {
-  try {
-    const position = await getCurrentPosition();
-    const distance = calculateDistance(
-      position.coords, 
-      {latitude: alarmSettings.destination[0], longitude: alarmSettings.destination[1]}
-    );
-    const progress = calculateProgress(distance);
-    updateNotificationProgress(progress);
-    
-    if (distance <= alarmSettings.radius) {
-      sendStatusNotification('end');
-      self.registration.unregister();
-    }
-  } catch (error) {
-    console.error('Error checking location:', error);
-  }
-}
-
-function getCurrentPosition() {
-  return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      maximumAge: 0,
-      timeout: 5000
-    });
+  if (!journeyData) return;
+  
+  const { destinationName, estimatedTime } = journeyData;
+  
+  // Format the estimated arrival time
+  const arrivalTime = new Date(estimatedTime);
+  const formattedTime = arrivalTime.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
   });
-}
-
-function calculateDistance(point1, point2) {
-  const R = 6371e3; // Earth's radius in meters
-  const φ1 = point1.latitude * Math.PI/180;
-  const φ2 = point2.latitude * Math.PI/180;
-  const Δφ = (point2.latitude - point1.latitude) * Math.PI/180;
-  const Δλ = (point2.longitude - point1.longitude) * Math.PI/180;
-
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-            Math.cos(φ1) * Math.cos(φ2) *
-            Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-  return R * c; // Distance in meters
-}
-
-function calculateProgress(currentDistance) {
-  const totalDistance = alarmSettings.initialDistance;
-  return Math.max(0, Math.min(100, ((totalDistance - currentDistance) / totalDistance) * 100));
-}
-
-function sendStatusNotification(type, estimatedTime) {
-  const title = 'OpenTravel';
-  const options = {
+  
+  // Show the initial notification
+  self.registration.showNotification('OpenTravel', {
+    body: `${formattedTime} to ${destinationName}`,
     icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
     badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    tag: 'opentravel-status',
-    renotify: true,
+    tag: activeNotificationTag,
+    renotify: false,
     requireInteraction: true,
-    actions: [{ action: 'open', title: 'View' }],
-    timestamp: Date.now()
-  };
-
-  if (type === 'start') {
-    options.body = `Arrival by ${formatTime(estimatedTime.end)}`;
-    options.data = { type: 'start', progress: 0 };
-  } else if (type === 'end') {
-    options.body = 'You have reached your destination!';
-    options.data = { type: 'end', progress: 100 };
-    options.vibrate = [200, 100, 200];
-  }
-
-  self.registration.showNotification(title, options).then((notification) => {
-    notificationId = notification.tag;
+    silent: true,
+    data: {
+      progress: 0,
+      destinationName,
+      timestamp: Date.now()
+    },
+    actions: [
+      {
+        action: 'view',
+        title: 'View'
+      },
+      {
+        action: 'cancel',
+        title: 'Cancel'
+      }
+    ]
   });
 }
 
-function updateNotificationProgress(progress) {
-  if (notificationId) {
-    self.registration.getNotifications({ tag: notificationId }).then((notifications) => {
+// Update journey progress
+function updateJourneyProgress(location, currentDistance) {
+  if (!journeyData) return;
+  
+  // Calculate progress percentage (0-100)
+  const progress = Math.min(100, Math.max(0, 
+    ((initialDistance - currentDistance) / initialDistance) * 100
+  ));
+  
+  // Calculate remaining time in minutes
+  const speed = journeyData.speed || 5; // meters per second (walking speed)
+  const remainingTimeSeconds = currentDistance / speed;
+  const remainingMinutes = Math.ceil(remainingTimeSeconds / 60);
+  
+  // Format the message based on remaining time
+  let message;
+  if (remainingMinutes <= 1) {
+    message = `Almost there!`;
+  } else {
+    message = `${remainingMinutes} min to ${journeyData.destinationName}`;
+  }
+  
+  // Only update notification if we have an active one
+  self.registration.getNotifications({ tag: activeNotificationTag })
+    .then(notifications => {
       if (notifications.length > 0) {
-        const notification = notifications[0];
-        const updatedOptions = {
-          ...notification.options,
-          data: { ...notification.data, progress: progress }
-        };
-        self.registration.showNotification(notification.title, updatedOptions);
+        // Close the existing notification
+        notifications.forEach(notification => notification.close());
+        
+        // Show updated notification with progress
+        self.registration.showNotification('OpenTravel', {
+          body: message,
+          icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+          badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+          tag: activeNotificationTag,
+          renotify: false,
+          requireInteraction: true,
+          silent: true,
+          data: {
+            progress: progress,
+            destinationName: journeyData.destinationName,
+            timestamp: Date.now()
+          },
+          actions: [
+            {
+              action: 'view',
+              title: 'View'
+            },
+            {
+              action: 'cancel',
+              title: 'Cancel'
+            }
+          ]
+        });
       }
     });
+  
+  // If we've reached the destination (within 10 meters), send arrival notification
+  if (currentDistance <= 10) {
+    self.registration.getNotifications({ tag: activeNotificationTag })
+      .then(notifications => {
+        notifications.forEach(notification => notification.close());
+        
+        // Show arrival notification
+        self.registration.showNotification('Destination Reached!', {
+          body: `You have arrived at ${journeyData.destinationName}`,
+          icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+          badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+          tag: 'opentravel-arrival',
+          vibrate: [200, 100, 200, 100, 200],
+          requireInteraction: true,
+          data: {
+            destinationName: journeyData.destinationName,
+            timestamp: Date.now()
+          }
+        });
+        
+        // Clear journey data
+        journeyData = null;
+      });
   }
 }
 
-function calculateEstimatedTime() {
-  const now = new Date();
-  const speed = 50; // assumed average speed in km/h
-  const distance = alarmSettings.initialDistance;
-  const timeInHours = distance / (speed * 1000); // convert distance to km
-  const timeInMs = timeInHours * 60 * 60 * 1000;
-  
-  return {
-    start: now,
-    end: new Date(now.getTime() + timeInMs)
-  };
-}
-
-function formatTime(date) {
-  return date.toLocaleTimeString('en-US', { 
-    hour: 'numeric', 
-    minute: '2-digit',
-    hour12: true 
-  });
-}
-
+// Handle notification clicks
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  if (event.action === 'open') {
-    clients.openWindow('/');
-  }
-});
-
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'alarm-sync') {
-    event.waitUntil(checkLocation());
+  
+  if (event.action === 'cancel') {
+    // Clear journey data
+    journeyData = null;
+    
+    // Inform the main app that the journey was canceled
+    self.clients.matchAll().then(clients => {
+      clients.forEach(client => {
+        client.postMessage({
+          type: 'JOURNEY_CANCELED'
+        });
+      });
+    });
+  } else {
+    // Open the app when notification is clicked
+    event.waitUntil(
+      self.clients.matchAll({ type: 'window' }).then(clientList => {
+        // If a window client is already open, focus it
+        for (const client of clientList) {
+          if (client.url === '/' && 'focus' in client) {
+            return client.focus();
+          }
+        }
+        // Otherwise, open a new window
+        if (self.clients.openWindow) {
+          return self.clients.openWindow('/');
+        }
+      })
+    );
   }
 });
