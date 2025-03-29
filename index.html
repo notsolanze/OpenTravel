@@ -20,6 +20,7 @@
             font-family: 'Space Grotesk', sans-serif;
             background-color: #111827;
             color: #F9FAFB;
+            touch-action: manipulation;
         }
         .distance-badge {
             position: fixed;
@@ -85,6 +86,8 @@
             color: #D1D5DB;
             cursor: pointer;
             transition: all 0.2s ease;
+            z-index: 1001;
+            position: relative;
         }
         .search-bar:hover {
             background-color: #4B5563;
@@ -93,6 +96,8 @@
             display: flex;
             justify-content: space-around;
             padding: 0 16px 16px;
+            position: relative;
+            z-index: 1001;
         }
         .quick-access-button {
             background-color: #374151;
@@ -105,15 +110,25 @@
             gap: 8px;
             width: 30%;
             color: #F9FAFB;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+            position: relative;
+            z-index: 1002;
+        }
+        .quick-access-button:hover {
+            background-color: #4B5563;
         }
         .recent-locations {
             padding: 0 16px 16px;
+            position: relative;
+            z-index: 1001;
         }
         .recent-location-item {
             display: flex;
             align-items: center;
             padding: 12px 0;
             border-bottom: 1px solid #374151;
+            cursor: pointer;
         }
         .recent-location-icon {
             width: 40px;
@@ -304,6 +319,7 @@
             justify-content: center;
             z-index: 900;
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            cursor: pointer;
         }
         
         /* Splash screen styles */
@@ -398,6 +414,36 @@
             background: #00b14f;
           }
         }
+        
+        /* Fix for clickable elements */
+        .clickable {
+            cursor: pointer;
+            position: relative;
+            z-index: 1002;
+        }
+        
+        /* Destination modal styles */
+        #destinationModal {
+            z-index: 2001 !important;
+        }
+        
+        /* Go button styles */
+        .go-button {
+            background-color: #10B981;
+            color: white;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .go-button:hover {
+            background-color: #059669;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -414,7 +460,7 @@
     <!-- Status Bar -->
     <div class="status-bar">
         <div class="time font-semibold">04:00</div>
-        <div class="status-icons flex items-center gap-2">
+        <div class="status-icons flex items-center gap-2 clickable">
             <i data-lucide="navigation" class="w-4 h-4"></i>
             <i data-lucide="wifi" class="w-4 h-4"></i>
             <i data-lucide="battery" class="w-4 h-4"></i>
@@ -425,7 +471,7 @@
     <div id="map" class="h-screen w-full"></div>
     
     <!-- Compass Button -->
-    <div class="compass-button" id="compassButton">
+    <div class="compass-button clickable" id="compassButton">
         <i data-lucide="compass" class="w-6 h-6 text-white"></i>
     </div>
     
@@ -434,25 +480,25 @@
     
     <!-- Bottom Sheet -->
     <div class="bottom-sheet" id="bottomSheet">
-        <div class="bottom-sheet-handle" id="bottomSheetHandle"></div>
+        <div class="bottom-sheet-handle clickable" id="bottomSheetHandle"></div>
         
         <!-- Search Bar -->
-        <div class="search-bar" id="searchBar">
+        <div class="search-bar clickable" id="searchBar">
             <i data-lucide="search" class="w-5 h-5 mr-3 text-gray-400"></i>
             <span class="text-gray-400">Where to?</span>
         </div>
         
         <!-- Quick Access Buttons -->
         <div class="quick-access">
-            <button class="quick-access-button" id="homeButton">
+            <button class="quick-access-button clickable" id="homeButton">
                 <i data-lucide="home" class="w-5 h-5 text-orange-500"></i>
                 <span>Home</span>
             </button>
-            <button class="quick-access-button" id="workButton">
+            <button class="quick-access-button clickable" id="workButton">
                 <i data-lucide="briefcase" class="w-5 h-5 text-blue-500"></i>
                 <span>Work</span>
             </button>
-            <button class="quick-access-button" id="newButton">
+            <button class="quick-access-button clickable" id="newButton">
                 <i data-lucide="plus" class="w-5 h-5 text-cyan-500"></i>
                 <span>New</span>
             </button>
@@ -461,18 +507,18 @@
         <!-- Recent Locations -->
         <div class="recent-locations">
             <h3 class="text-gray-400 text-sm mb-2">Recent</h3>
-            <div id="recentLocations">
+            <div id="recentLocations" class="clickable">
                 <!-- Recent locations will be populated here -->
             </div>
         </div>
     </div>
     
     <!-- Destination Input Modal -->
-    <div id="destinationModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-2000 hidden">
+    <div id="destinationModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-2001 hidden">
         <div class="bg-gray-800 rounded-xl p-6 w-11/12 max-w-md">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="text-xl font-bold">Set Destination</h3>
-                <button id="closeDestinationModal" class="text-gray-400 hover:text-white">
+                <button id="closeDestinationModal" class="text-gray-400 hover:text-white clickable">
                     <i data-lucide="x" class="w-6 h-6"></i>
                 </button>
             </div>
@@ -485,14 +531,14 @@
                 <input type="number" id="radius" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 text-white" value="1000">
             </div>
             <div class="flex justify-between items-center mt-6">
-                <button id="closeDestinationModal" class="bg-gray-700 text-white py-2 px-4 rounded-lg hover:bg-gray-600 transition duration-300">
+                <button id="cancelDestinationBtn" class="bg-gray-700 text-white py-2 px-4 rounded-lg hover:bg-gray-600 transition duration-300 clickable">
                     Cancel
                 </button>
                 <div class="flex space-x-3">
-                    <button id="stopAlarm" class="bg-red-500 text-white p-3 rounded-full hover:bg-red-600 transition duration-300 hidden">
+                    <button id="stopAlarm" class="bg-red-500 text-white p-3 rounded-full hover:bg-red-600 transition duration-300 hidden clickable">
                         <i data-lucide="bell-off" class="w-6 h-6"></i>
                     </button>
-                    <button id="setAlarm" class="bg-green-500 text-white py-2 px-6 rounded-lg hover:bg-green-600 transition duration-300 flex items-center gap-2">
+                    <button id="setAlarm" class="go-button clickable">
                         <i data-lucide="navigation" class="w-5 h-5"></i>
                         <span>Go</span>
                     </button>
@@ -505,11 +551,11 @@
     <!-- Settings Page -->
     <div id="settingsPage" class="settings-page">
         <div class="settings-header">
-            <button id="backFromSettings" class="p-2 rounded-full hover:bg-gray-700 transition duration-300">
+            <button id="backFromSettings" class="p-2 rounded-full hover:bg-gray-700 transition duration-300 clickable">
                 <i data-lucide="arrow-left" class="w-6 h-6"></i>
             </button>
             <h2 class="text-xl font-bold">Settings</h2>
-            <button id="resetSession" class="p-2 rounded-full hover:bg-gray-700 transition duration-300">
+            <button id="resetSession" class="p-2 rounded-full hover:bg-gray-700 transition duration-300 clickable">
                 <i data-lucide="refresh-cw" class="w-6 h-6"></i>
             </button>
         </div>
@@ -522,7 +568,7 @@
                 <label for="homeAddress" class="block text-sm font-medium text-gray-300 mb-1">Home Address</label>
                 <div class="flex">
                     <input type="text" id="homeAddress" class="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-l-lg focus:ring-green-500 focus:border-green-500 text-white" placeholder="Enter home address">
-                    <button id="saveHomeAddress" class="bg-green-500 text-white px-4 rounded-r-lg hover:bg-green-600">Save</button>
+                    <button id="saveHomeAddress" class="bg-green-500 text-white px-4 rounded-r-lg hover:bg-green-600 clickable">Save</button>
                 </div>
             </div>
             
@@ -530,7 +576,7 @@
                 <label for="workAddress" class="block text-sm font-medium text-gray-300 mb-1">Work Address</label>
                 <div class="flex">
                     <input type="text" id="workAddress" class="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-l-lg focus:ring-green-500 focus:border-green-500 text-white" placeholder="Enter work address">
-                    <button id="saveWorkAddress" class="bg-green-500 text-white px-4 rounded-r-lg hover:bg-green-600">Save</button>
+                    <button id="saveWorkAddress" class="bg-green-500 text-white px-4 rounded-r-lg hover:bg-green-600 clickable">Save</button>
                 </div>
             </div>
             
@@ -538,7 +584,7 @@
                 <label for="favoritePlace" class="block text-sm font-medium text-gray-300 mb-1">Favorite Place</label>
                 <div class="flex">
                     <input type="text" id="favoritePlace" class="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-l-lg focus:ring-green-500 focus:border-green-500 text-white" placeholder="Enter favorite place">
-                    <button id="saveFavoritePlace" class="bg-green-500 text-white px-4 rounded-r-lg hover:bg-green-600">Save</button>
+                    <button id="saveFavoritePlace" class="bg-green-500 text-white px-4 rounded-r-lg hover:bg-green-600 clickable">Save</button>
                 </div>
             </div>
         </div>
@@ -580,7 +626,7 @@
             </div>
         </div>
         
-        <button id="saveSettings" class="w-full bg-green-500 text-white p-3 rounded-lg hover:bg-green-600 transition duration-300">
+        <button id="saveSettings" class="w-full bg-green-500 text-white p-3 rounded-lg hover:bg-green-600 transition duration-300 clickable">
             Save Settings
         </button>
     </div>
@@ -609,7 +655,7 @@
                 <div class="live-activity-dot" id="liveActivityDot" style="left: 0%"></div>
             </div>
             <div class="live-activity-controls">
-                <button class="live-activity-button" id="minimizeActivity" title="Minimize">
+                <button class="live-activity-button clickable" id="minimizeActivity" title="Minimize">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"></path><path d="M21 8h-3a2 2 0 0 1-2-2V3"></path><path d="M3 16h3a2 2 0 0 1 2 2v3"></path><path d="M16 21v-3a2 2 0 0 1 2-2h3"></path></svg>
                 </button>
             </div>
@@ -628,7 +674,7 @@
                 <h3 id="alertTitle" class="font-semibold text-white"></h3>
                 <p id="alertMessage" class="text-gray-300 text-sm"></p>
             </div>
-            <button onclick="hideAlert()" class="flex-shrink-0 text-gray-400 hover:text-gray-200">
+            <button onclick="hideAlert()" class="flex-shrink-0 text-gray-400 hover:text-gray-200 clickable">
                 <i data-lucide="x" class="w-5 h-5"></i>
             </button>
         </div>
@@ -804,12 +850,14 @@
             
             // Handle drag to resize
             handle.addEventListener('touchstart', function(e) {
+                e.stopPropagation(); // Stop event from propagating
                 startY = e.touches[0].clientY;
                 startHeight = parseInt(bottomSheet.style.height);
                 document.body.style.overflow = 'hidden';
             });
             
             handle.addEventListener('touchmove', function(e) {
+                e.stopPropagation(); // Stop event from propagating
                 const deltaY = startY - e.touches[0].clientY;
                 currentHeight = startHeight + deltaY;
                 
@@ -820,7 +868,8 @@
                 bottomSheet.style.height = currentHeight + 'px';
             });
             
-            handle.addEventListener('touchend', function() {
+            handle.addEventListener('touchend', function(e) {
+                e.stopPropagation(); // Stop event from propagating
                 document.body.style.overflow = '';
                 
                 // Snap to positions
@@ -837,17 +886,26 @@
             });
             
             // Open destination modal when search bar is clicked
-            searchBar.addEventListener('click', function() {
+            searchBar.addEventListener('click', function(e) {
+                e.stopPropagation(); // Stop event from propagating
+                console.log("Search bar clicked!");
                 document.getElementById('destinationModal').classList.remove('hidden');
             });
             
-            // Close destination modal
-            document.getElementById('closeDestinationModal').addEventListener('click', function() {
+            // Close destination modal - both X button and Cancel button
+            document.getElementById('closeDestinationModal').addEventListener('click', function(e) {
+                e.stopPropagation(); // Stop event from propagating
+                document.getElementById('destinationModal').classList.add('hidden');
+            });
+            document.getElementById('cancelDestinationBtn').addEventListener('click', function(e) {
+                e.stopPropagation(); // Stop event from propagating
                 document.getElementById('destinationModal').classList.add('hidden');
             });
             
-            // Setup quick access buttons
-            document.getElementById('homeButton').addEventListener('click', function() {
+            // Setup quick access buttons with debug logging
+            document.getElementById('homeButton').addEventListener('click', function(e) {
+                e.stopPropagation(); // Stop event from propagating
+                console.log('Home button clicked');
                 if (appState.savedPlaces.home) {
                     document.getElementById('destination').value = appState.savedPlaces.home.name;
                     document.getElementById('destinationModal').classList.remove('hidden');
@@ -857,7 +915,9 @@
                 }
             });
             
-            document.getElementById('workButton').addEventListener('click', function() {
+            document.getElementById('workButton').addEventListener('click', function(e) {
+                e.stopPropagation(); // Stop event from propagating
+                console.log('Work button clicked');
                 if (appState.savedPlaces.work) {
                     document.getElementById('destination').value = appState.savedPlaces.work.name;
                     document.getElementById('destinationModal').classList.remove('hidden');
@@ -867,7 +927,9 @@
                 }
             });
             
-            document.getElementById('newButton').addEventListener('click', function() {
+            document.getElementById('newButton').addEventListener('click', function(e) {
+                e.stopPropagation(); // Stop event from propagating
+                console.log('New button clicked');
                 document.getElementById('destination').value = '';
                 document.getElementById('destinationModal').classList.remove('hidden');
             });
@@ -944,7 +1006,7 @@
             
             locationsToShow.forEach(location => {
                 const locationItem = document.createElement('div');
-                locationItem.className = 'recent-location-item';
+                locationItem.className = 'recent-location-item clickable';
                 locationItem.innerHTML = `
                     <div class="recent-location-icon">
                         <i data-lucide="history" class="w-5 h-5"></i>
@@ -955,7 +1017,9 @@
                     </div>
                 `;
                 
-                locationItem.addEventListener('click', () => {
+                locationItem.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    console.log('Recent location clicked:', location.name);
                     document.getElementById('destination').value = location.name;
                     document.getElementById('destinationModal').classList.remove('hidden');
                 });
@@ -996,7 +1060,10 @@
         function initMap() {
             map = L.map('map', {
                 zoomControl: false,
-                attributionControl: false
+                attributionControl: false,
+                dragging: true, // Ensure dragging is enabled
+                touchZoom: true,
+                scrollWheelZoom: true
             }).setView([14.5995, 120.9842], 15); // Manila coordinates
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1027,7 +1094,8 @@
             }
             
             // Add compass button functionality
-            document.getElementById('compassButton').addEventListener('click', () => {
+            document.getElementById('compassButton').addEventListener('click', (e) => {
+                e.stopPropagation(); // Stop event from propagating
                 if (userMarker) {
                     map.setView(userMarker.getLatLng(), 16);
                 }
@@ -1433,13 +1501,23 @@
             initMap();
             
             // Set alarm button
-            document.getElementById('setAlarm').addEventListener('click', () => setAlarm(false));
+            document.getElementById('setAlarm').addEventListener('click', (e) => {
+                e.stopPropagation();
+                console.log("Go button clicked!");
+                setAlarm(false);
+            });
             
             // Stop alarm button
-            document.getElementById('stopAlarm').addEventListener('click', stopAlarm);
+            document.getElementById('stopAlarm').addEventListener('click', (e) => {
+                e.stopPropagation();
+                stopAlarm();
+            });
             
-            // Settings button
-            document.querySelector('.status-bar').addEventListener('click', openSettings);
+            // Settings button - only attach to the status icons, not the entire bar
+            document.querySelector('.status-icons').addEventListener('click', function(e) {
+                e.stopPropagation(); // Stop event from propagating
+                openSettings();
+            });
             
             // Back from settings
             document.getElementById('backFromSettings').addEventListener('click', closeSettings);
@@ -1729,6 +1807,38 @@
             alertPopup.classList.remove('border-l-4', 'border-green-500', 'border-red-500', 'border-blue-500');
             document.getElementById('alertIcon').classList.remove('bg-green-900', 'bg-red-900', 'bg-blue-900');
         }
+    </script>
+    
+    <script>
+        // Add this at the end of the DOMContentLoaded event handler
+        // Ensure map container has proper pointer events
+        document.getElementById('map').style.pointerEvents = 'auto';
+        
+        // Fix for touch events on mobile
+        document.addEventListener('DOMContentLoaded', function() {
+            // Make sure all clickable elements are actually clickable
+            const clickables = document.querySelectorAll('.clickable');
+            clickables.forEach(el => {
+                el.addEventListener('touchstart', function(e) {
+                    // This prevents the touch event from being treated as a scroll
+                    e.stopPropagation();
+                });
+            });
+            
+            // Debug logging for search bar clicks
+            const searchBar = document.getElementById('searchBar');
+            if (searchBar) {
+                searchBar.addEventListener('touchstart', function(e) {
+                    console.log('Search bar touched!');
+                    e.stopPropagation();
+                });
+                
+                searchBar.addEventListener('mousedown', function(e) {
+                    console.log('Search bar mouse down!');
+                    e.stopPropagation();
+                });
+            }
+        });
     </script>
 </body>
 </html>
