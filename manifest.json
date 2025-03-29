@@ -2,21 +2,59 @@
   "name": "OpenTravel",
   "short_name": "OpenTravel",
   "description": "Your journey companion",
-  "start_url": "/",
+  "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#10B981",
   "theme_color": "#10B981",
-  "orientation": "portrait",
   "icons": [
     {
       "src": "https://cdn-icons-png.flaticon.com/128/10473/10473293.png",
       "sizes": "128x128",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "https://cdn-icons-png.flaticon.com/512/10473/10473293.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
-  ]
+  ],
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "shortcuts": [
+    {
+      "name": "Set Alarm",
+      "short_name": "Alarm",
+      "description": "Quickly set a new travel alarm",
+      "url": "/?action=set_alarm",
+      "icons": [{ "src": "https://cdn-icons-png.flaticon.com/128/10473/10473293.png", "sizes": "128x128" }]
+    },
+    {
+      "name": "Settings",
+      "short_name": "Settings",
+      "description": "Adjust app settings",
+      "url": "/?action=settings",
+      "icons": [{ "src": "https://cdn-icons-png.flaticon.com/128/10473/10473293.png", "sizes": "128x128" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/placeholder.svg?height=640&width=320",
+      "sizes": "320x640",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "OpenTravel App - Main Screen"
+    },
+    {
+      "src": "/placeholder.svg?height=640&width=320",
+      "sizes": "320x640",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "OpenTravel App - Alarm Set"
+    }
+  ],
+  "categories": ["travel", "utilities"],
+  "lang": "en-US",
+  "dir": "ltr"
 }
