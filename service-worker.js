@@ -19,7 +19,6 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAME)
       .then((cache) => {
         console.log('[Service Worker] Caching app shell');
-        // Use Promise.allSettled instead of Promise.all to handle failed fetches
         return Promise.allSettled(
           urlsToCache.map(url => 
             fetch(url)
@@ -31,14 +30,12 @@ self.addEventListener('install', (event) => {
               })
               .catch(error => {
                 console.warn(`[Service Worker] Failed to cache: ${url}`, error);
-                // Continue despite the error
                 return Promise.resolve();
               })
           )
         );
       })
   );
-  // Force the waiting service worker to become the active service worker
   self.skipWaiting();
 });
 
@@ -58,14 +55,12 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
-  // Claim any clients immediately
   event.waitUntil(clients.claim());
   console.log('[Service Worker] Service Worker activated');
 });
 
 // Fetch event - serve from cache if available
 self.addEventListener('fetch', (event) => {
-  // Skip cross-origin requests
   if (!event.request.url.startsWith(self.location.origin) && 
       !event.request.url.startsWith('https://cdn') && 
       !event.request.url.startsWith('https://unpkg') && 
@@ -77,27 +72,22 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
-        // Return cached response if found
         if (response) {
           return response;
         }
         
-        // Clone the request because it's a one-time use stream
         const fetchRequest = event.request.clone();
         
         return fetch(fetchRequest)
           .then(response => {
-            // Check if we received a valid response
             if (!response || response.status !== 200 || response.type !== 'basic') {
               return response;
             }
             
-            // Clone the response because it's a one-time use stream
             const responseToCache = response.clone();
             
             caches.open(CACHE_NAME)
               .then(cache => {
-                // Don't cache API calls or external resources
                 if (event.request.url.includes('/api/') || 
                     !event.request.url.startsWith(self.location.origin)) {
                   return;
@@ -109,7 +99,6 @@ self.addEventListener('fetch', (event) => {
           })
           .catch(error => {
             console.error('[Service Worker] Fetch failed:', error);
-            // You could return a custom offline page here
             return new Response('Network error occurred', {
               status: 503,
               statusText: 'Service Unavailable',
@@ -124,10 +113,11 @@ self.addEventListener('fetch', (event) => {
 
 // Active journey tracking
 let journeyData = null;
+let notificationTag = 'opentravel-journey';
 let initialDistance = 0;
 let lastNotificationTime = 0;
-const MIN_UPDATE_INTERVAL = 30000; // Increase to 30 seconds between notification updates
-let activeNotification = null; // Track the active notification
+const MIN_UPDATE_INTERVAL = 30000; // 30 seconds between updates
+let hasArrived = false;
 
 // Listen for messages from the main app
 self.addEventListener('message', (event) => {
@@ -138,37 +128,61 @@ self.addEventListener('message', (event) => {
     journeyData = event.data.journeyData;
     initialDistance = journeyData.initialDistance;
     lastNotificationTime = Date.now();
+    hasArrived = false;
     
     // Start the journey with initial notification
     startJourney();
   } else if (event.data && event.data.type === 'UPDATE_LOCATION') {
     // Update the notification with new location data
-    if (journeyData) {
+    if (journeyData && !hasArrived) {
       const currentTime = Date.now();
+      const currentDistance = event.data.distance;
+      
+      // Check if arrived
+      if (currentDistance <= journeyData.radius) {
+        hasArrived = true;
+        showArrivalNotification();
+        
+        // Notify the main app to play alarm
+        sendMessageToClients({
+          type: 'PLAY_ALARM'
+        });
+      } 
       // Only update notification if enough time has passed since last update
-      if (currentTime - lastNotificationTime > MIN_UPDATE_INTERVAL) {
-        updateJourneyProgress(event.data.location, event.data.distance);
+      else if (currentTime - lastNotificationTime > MIN_UPDATE_INTERVAL) {
+        updateJourneyProgress(event.data.location, currentDistance);
         lastNotificationTime = currentTime;
       }
     }
   } else if (event.data && event.data.type === 'STOP_JOURNEY') {
     // Clear journey data
     journeyData = null;
+    hasArrived = false;
+    
     // Close any active notifications
-    if (activeNotification) {
-      activeNotification.close();
-      activeNotification = null;
-    }
+    self.registration.getNotifications({ tag: notificationTag })
+      .then(notifications => {
+        notifications.forEach(notification => notification.close());
+      });
   } else if (event.data && event.data.type === 'TEST_NOTIFICATION') {
     // Send a test notification
     showTestNotification();
   }
 });
 
+// Send message to all clients
+function sendMessageToClients(message) {
+  self.clients.matchAll().then(clients => {
+    clients.forEach(client => {
+      client.postMessage(message);
+    });
+  });
+}
+
 // Show a test notification
 function showTestNotification() {
-  // First, close any existing notifications
-  self.registration.getNotifications()
+  // First, close any existing notifications with the same tag
+  self.registration.getNotifications({ tag: 'test-notification' })
     .then(notifications => {
       notifications.forEach(notification => notification.close());
       
@@ -186,19 +200,17 @@ function showTestNotification() {
 function startJourney() {
   if (!journeyData) return;
   
-  // First, close ALL existing notifications
-  self.registration.getNotifications()
+  // First, close ALL existing notifications with our tag
+  self.registration.getNotifications({ tag: notificationTag })
     .then(notifications => {
-      // Close all existing notifications
       notifications.forEach(notification => notification.close());
       
-      // For iOS, we'll use a single notification that we'll update
-      // This mimics the Live Activity behavior as much as possible with web notifications
+      // Show the initial notification
       const options = {
-        body: `Your travel has started!`,
+        body: `Your travel to ${journeyData.destinationName} has started!`,
         icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
         badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-        tag: 'opentravel-journey', // Use a consistent tag
+        tag: notificationTag,
         vibrate: [200, 100, 200],
         requireInteraction: true, // Keep the notification visible
         data: {
@@ -212,14 +224,6 @@ function startJourney() {
       // Show the notification
       self.registration.showNotification('OPEN TRAVEL - Your travel has started!', options)
         .then(() => {
-          // Get the notification we just created
-          return self.registration.getNotifications({tag: 'opentravel-journey'});
-        })
-        .then(notifications => {
-          if (notifications.length > 0) {
-            activeNotification = notifications[0];
-          }
-          
           // Schedule an update after a short delay to show the progress notification
           setTimeout(() => {
             if (journeyData) {
@@ -232,7 +236,7 @@ function startJourney() {
 
 // Update journey progress
 function updateJourneyProgress(location, currentDistance) {
-  if (!journeyData) return;
+  if (!journeyData || hasArrived) return;
   
   // Calculate progress percentage (0-100)
   const progress = Math.min(100, Math.max(0, 
@@ -246,23 +250,19 @@ function updateJourneyProgress(location, currentDistance) {
   
   // Format the message based on remaining time
   let title, message;
-  if (currentDistance <= 10) {
-    title = 'OPEN TRAVEL - You have reached your destination!';
-    message = `You have reached your destination!`;
-    showArrivalNotification();
-    return;
-  } else if (remainingMinutes <= 1) {
+  
+  if (remainingMinutes <= 1) {
     title = 'OPEN TRAVEL - Almost there!';
-    message = `Almost there!`;
+    message = `Almost at ${journeyData.destinationName}`;
   } else {
     title = `OPEN TRAVEL - ${remainingMinutes} min to destination`;
-    message = `${journeyData.destinationName}`;
+    message = `${journeyData.destinationName} - ${Math.round(progress)}% complete`;
   }
   
   console.log('[Service Worker] Updating journey progress notification');
   
   // Close any existing notifications with the same tag
-  self.registration.getNotifications({tag: 'opentravel-journey'})
+  self.registration.getNotifications({ tag: notificationTag })
     .then(notifications => {
       // Close existing notifications
       notifications.forEach(notification => notification.close());
@@ -272,7 +272,7 @@ function updateJourneyProgress(location, currentDistance) {
         body: message,
         icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
         badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-        tag: 'opentravel-journey',
+        tag: notificationTag,
         silent: true, // Don't make sound for updates
         requireInteraction: true, // Keep the notification visible
         data: {
@@ -285,16 +285,7 @@ function updateJourneyProgress(location, currentDistance) {
       };
       
       // Show the updated notification
-      self.registration.showNotification(title, options)
-        .then(() => {
-          // Get the notification we just created
-          return self.registration.getNotifications({tag: 'opentravel-journey'});
-        })
-        .then(notifications => {
-          if (notifications.length > 0) {
-            activeNotification = notifications[0];
-          }
-        });
+      self.registration.showNotification(title, options);
     });
 }
 
@@ -304,30 +295,25 @@ function showArrivalNotification() {
   
   console.log('[Service Worker] Showing arrival notification');
   
-  // Close ALL existing notifications
-  self.registration.getNotifications()
+  // Close ALL existing notifications with our tag
+  self.registration.getNotifications({ tag: notificationTag })
     .then(notifications => {
       notifications.forEach(notification => notification.close());
       
-      // Show arrival notification
+      // Show arrival notification with a different tag
       self.registration.showNotification('OPEN TRAVEL - You have reached your destination!', {
-        body: `You have reached your destination!`,
+        body: `You have reached ${journeyData.destinationName}!`,
         icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
         badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
         tag: 'opentravel-arrival', // Different tag for arrival notification
         vibrate: [200, 100, 200, 100, 200],
-        requireInteraction: false, // Auto dismiss after a while
+        requireInteraction: true, // Keep visible until user interacts
         data: {
           destinationName: journeyData.destinationName,
-          timestamp: Date.now()
+          timestamp: Date.now(),
+          isArrivalNotification: true
         }
-      })
-      .then(() => {
-        activeNotification = null;
       });
-      
-      // Clear journey data
-      journeyData = null;
     });
 }
 
@@ -338,6 +324,9 @@ self.addEventListener('notificationclick', (event) => {
   // Close the notification
   event.notification.close();
   
+  // Check if this is an arrival notification
+  const isArrivalNotification = event.notification.data && event.notification.data.isArrivalNotification;
+  
   // Open the app when notification is clicked
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true })
@@ -345,7 +334,14 @@ self.addEventListener('notificationclick', (event) => {
         // If a window client is already open, focus it
         for (const client of clientList) {
           if ('focus' in client) {
-            return client.focus();
+            client.focus();
+            // If this is an arrival notification, send a message to stop the journey
+            if (isArrivalNotification) {
+              client.postMessage({
+                type: 'ARRIVED_AT_DESTINATION'
+              });
+            }
+            return;
           }
         }
         // Otherwise, open a new window
