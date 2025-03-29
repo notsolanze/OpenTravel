@@ -67,7 +67,9 @@
             border-top-right-radius: 20px;
             z-index: 1000;
             box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
-            transition: transform 0.3s ease;
+            transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+            touch-action: none;
+            will-change: transform, height;
         }
         .bottom-sheet-handle {
             width: 40px;
@@ -75,6 +77,10 @@
             background-color: #6B7280;
             border-radius: 2px;
             margin: 12px auto;
+            cursor: grab;
+        }
+        .bottom-sheet-handle:active {
+            cursor: grabbing;
         }
         .search-bar {
             background-color: #374151;
@@ -458,22 +464,11 @@
     </div>
 
     <!-- Status Bar -->
-    <div class="status-bar">
-        <div class="time font-semibold">04:00</div>
-        <div class="status-icons flex items-center gap-2 clickable">
-            <i data-lucide="navigation" class="w-4 h-4"></i>
-            <i data-lucide="wifi" class="w-4 h-4"></i>
-            <i data-lucide="battery" class="w-4 h-4"></i>
-        </div>
-    </div>
-
+    
     <!-- Main Map Container -->
     <div id="map" class="h-screen w-full"></div>
     
     <!-- Compass Button -->
-    <div class="compass-button clickable" id="compassButton">
-        <i data-lucide="compass" class="w-6 h-6 text-white"></i>
-    </div>
     
     <!-- Distance Badge -->
     <div id="distance" class="distance-badge text-sm font-semibold text-white"></div>
@@ -481,6 +476,16 @@
     <!-- Bottom Sheet -->
     <div class="bottom-sheet" id="bottomSheet">
         <div class="bottom-sheet-handle clickable" id="bottomSheetHandle"></div>
+        
+        <!-- Navigation Controls -->
+        <div class="navigation-controls flex justify-between items-center px-4 mb-3">
+            <div class="flex items-center gap-2">
+                <button id="compassBtn" class="p-2 bg-gray-700 rounded-full clickable">
+                    <i data-lucide="compass" class="w-5 h-5 text-white"></i>
+                </button>
+            </div>
+            <div class="time font-semibold text-white">04:00</div>
+        </div>
         
         <!-- Search Bar -->
         <div class="search-bar clickable" id="searchBar">
@@ -830,7 +835,7 @@
             populateRecentLocations();
         });
         
-        // Update clock in status bar
+        // Update clock in bottom sheet
         function updateClock() {
             const now = new Date();
             const hours = now.getHours().toString().padStart(2, '0');
@@ -844,67 +849,129 @@
             const handle = document.getElementById('bottomSheetHandle');
             const searchBar = document.getElementById('searchBar');
             let startY, startHeight, currentHeight;
+            let isDragging = false;
             
             // Set initial height
             bottomSheet.style.height = '230px';
             
+            // Define snap points
+            const snapPoints = {
+                minimized: 100,
+                partial: 230,
+                full: window.innerHeight - 100
+            };
+            
             // Handle drag to resize
             handle.addEventListener('touchstart', function(e) {
-                e.stopPropagation(); // Stop event from propagating
+                e.stopPropagation();
+                isDragging = true;
                 startY = e.touches[0].clientY;
                 startHeight = parseInt(bottomSheet.style.height);
                 document.body.style.overflow = 'hidden';
+                handle.style.cursor = 'grabbing';
             });
             
-            handle.addEventListener('touchmove', function(e) {
-                e.stopPropagation(); // Stop event from propagating
+            handle.addEventListener('mousedown', function(e) {
+                e.stopPropagation();
+                isDragging = true;
+                startY = e.clientY;
+                startHeight = parseInt(bottomSheet.style.height);
+                document.body.style.overflow = 'hidden';
+                handle.style.cursor = 'grabbing';
+                
+                // Add mouse move and mouse up listeners to document
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+            });
+            
+            function handleMouseMove(e) {
+                if (!isDragging) return;
+                const deltaY = startY - e.clientY;
+                currentHeight = startHeight + deltaY;
+                
+                // Limit min and max height
+                if (currentHeight < snapPoints.minimized) currentHeight = snapPoints.minimized;
+                if (currentHeight > snapPoints.full) currentHeight = snapPoints.full;
+                
+                bottomSheet.style.height = currentHeight + 'px';
+            }
+            
+            function handleMouseUp(e) {
+                if (!isDragging) return;
+                isDragging = false;
+                document.body.style.overflow = '';
+                handle.style.cursor = 'grab';
+                
+                // Snap to positions
+                snapToPosition();
+                
+                // Remove event listeners
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            }
+            
+            document.addEventListener('touchmove', function(e) {
+                if (!isDragging) return;
                 const deltaY = startY - e.touches[0].clientY;
                 currentHeight = startHeight + deltaY;
                 
                 // Limit min and max height
-                if (currentHeight < 100) currentHeight = 100;
-                if (currentHeight > window.innerHeight - 100) currentHeight = window.innerHeight - 100;
+                if (currentHeight < snapPoints.minimized) currentHeight = snapPoints.minimized;
+                if (currentHeight > snapPoints.full) currentHeight = snapPoints.full;
                 
                 bottomSheet.style.height = currentHeight + 'px';
-            });
+            }, { passive: false });
             
-            handle.addEventListener('touchend', function(e) {
-                e.stopPropagation(); // Stop event from propagating
+            document.addEventListener('touchend', function(e) {
+                if (!isDragging) return;
+                isDragging = false;
                 document.body.style.overflow = '';
+                handle.style.cursor = 'grab';
                 
                 // Snap to positions
-                if (currentHeight < 150) {
-                    bottomSheet.style.height = '100px';
-                    bottomSheetHeight = 'minimized';
-                } else if (currentHeight < window.innerHeight / 2) {
-                    bottomSheet.style.height = '230px';
-                    bottomSheetHeight = 'partial';
-                } else {
-                    bottomSheet.style.height = (window.innerHeight - 100) + 'px';
-                    bottomSheetHeight = 'full';
-                }
+                snapToPosition();
             });
+            
+            function snapToPosition() {
+                // Snap to positions
+                if (currentHeight < (snapPoints.minimized + snapPoints.partial) / 2) {
+                    bottomSheet.style.height = snapPoints.minimized + 'px';
+                    bottomSheetHeight = 'minimized';
+                    bottomSheet.classList.add('minimized');
+                    bottomSheet.classList.remove('partial', 'full');
+                } else if (currentHeight < (snapPoints.partial + snapPoints.full) / 2) {
+                    bottomSheet.style.height = snapPoints.partial + 'px';
+                    bottomSheetHeight = 'partial';
+                    bottomSheet.classList.add('partial');
+                    bottomSheet.classList.remove('minimized', 'full');
+                } else {
+                    bottomSheet.style.height = snapPoints.full + 'px';
+                    bottomSheetHeight = 'full';
+                    bottomSheet.classList.add('full');
+                    bottomSheet.classList.remove('minimized', 'partial');
+                }
+            }
             
             // Open destination modal when search bar is clicked
             searchBar.addEventListener('click', function(e) {
-                e.stopPropagation(); // Stop event from propagating
+                e.stopPropagation();
                 console.log("Search bar clicked!");
                 document.getElementById('destinationModal').classList.remove('hidden');
             });
             
             // Close destination modal - both X button and Cancel button
             document.getElementById('closeDestinationModal').addEventListener('click', function(e) {
-                e.stopPropagation(); // Stop event from propagating
+                e.stopPropagation();
                 document.getElementById('destinationModal').classList.add('hidden');
             });
             document.getElementById('cancelDestinationBtn').addEventListener('click', function(e) {
-                e.stopPropagation(); // Stop event from propagating
+                e.stopPropagation();
                 document.getElementById('destinationModal').classList.add('hidden');
             });
             
             // Setup quick access buttons with debug logging
             document.getElementById('homeButton').addEventListener('click', function(e) {
-                e.stopPropagation(); // Stop event from propagating
+                e.stopPropagation();
                 console.log('Home button clicked');
                 if (appState.savedPlaces.home) {
                     document.getElementById('destination').value = appState.savedPlaces.home.name;
@@ -916,7 +983,7 @@
             });
             
             document.getElementById('workButton').addEventListener('click', function(e) {
-                e.stopPropagation(); // Stop event from propagating
+                e.stopPropagation();
                 console.log('Work button clicked');
                 if (appState.savedPlaces.work) {
                     document.getElementById('destination').value = appState.savedPlaces.work.name;
@@ -928,7 +995,7 @@
             });
             
             document.getElementById('newButton').addEventListener('click', function(e) {
-                e.stopPropagation(); // Stop event from propagating
+                e.stopPropagation();
                 console.log('New button clicked');
                 document.getElementById('destination').value = '';
                 document.getElementById('destinationModal').classList.remove('hidden');
@@ -940,6 +1007,17 @@
                     setAlarm(false);
                 }
             });
+            
+            // Compass button functionality
+            document.getElementById('compassBtn').addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (userMarker) {
+                    map.setView(userMarker.getLatLng(), 16);
+                }
+            });
+            
+            // Update time in the bottom sheet
+            updateClock();
         }
         
         // Setup Live Activity controls
@@ -1094,12 +1172,6 @@
             }
             
             // Add compass button functionality
-            document.getElementById('compassButton').addEventListener('click', (e) => {
-                e.stopPropagation(); // Stop event from propagating
-                if (userMarker) {
-                    map.setView(userMarker.getLatLng(), 16);
-                }
-            });
         }
 
         // Play alarm
