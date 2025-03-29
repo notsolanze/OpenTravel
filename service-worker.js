@@ -1,47 +1,125 @@
 const CACHE_NAME = 'opentravel-cache-v1';
 const urlsToCache = [
-  '/',
-  '/index.html',
+  './',
+  './index.html',
   'https://cdn.tailwindcss.com',
   'https://unpkg.com/leaflet@1.7.1/dist/leaflet.css',
   'https://unpkg.com/leaflet@1.7.1/dist/leaflet.js',
   'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap',
   'https://unpkg.com/lucide@latest',
   'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-  'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3',
-  '/splash-screen.png'
+  'https://cdn-icons-png.flaticon.com/512/10473/10473293.png',
+  'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'
 ];
 
+// Install event - cache assets
 self.addEventListener('install', (event) => {
+  console.log('[Service Worker] Installing Service Worker...', event);
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(urlsToCache))
+      .then((cache) => {
+        console.log('[Service Worker] Caching app shell');
+        // Use Promise.allSettled instead of Promise.all to handle failed fetches
+        return Promise.allSettled(
+          urlsToCache.map(url => 
+            fetch(url)
+              .then(response => {
+                if (!response.ok) {
+                  throw new Error(`Failed to fetch ${url}`);
+                }
+                return cache.put(url, response);
+              })
+              .catch(error => {
+                console.warn(`[Service Worker] Failed to cache: ${url}`, error);
+                // Continue despite the error
+                return Promise.resolve();
+              })
+          )
+        );
+      })
   );
   // Force the waiting service worker to become the active service worker
   self.skipWaiting();
 });
 
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => response || fetch(event.request))
-  );
-});
-
+// Activate event - clean up old caches
 self.addEventListener('activate', (event) => {
+  console.log('[Service Worker] Activating Service Worker...', event);
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
           if (cacheName !== CACHE_NAME) {
+            console.log('[Service Worker] Removing old cache', cacheName);
             return caches.delete(cacheName);
           }
+          return Promise.resolve();
         })
       );
     })
   );
   // Claim any clients immediately
   event.waitUntil(clients.claim());
+  console.log('[Service Worker] Service Worker activated');
+});
+
+// Fetch event - serve from cache if available
+self.addEventListener('fetch', (event) => {
+  // Skip cross-origin requests
+  if (!event.request.url.startsWith(self.location.origin) && 
+      !event.request.url.startsWith('https://cdn') && 
+      !event.request.url.startsWith('https://unpkg') && 
+      !event.request.url.startsWith('https://fonts') && 
+      !event.request.url.startsWith('https://assets.mixkit')) {
+    return;
+  }
+  
+  event.respondWith(
+    caches.match(event.request)
+      .then((response) => {
+        // Return cached response if found
+        if (response) {
+          return response;
+        }
+        
+        // Clone the request because it's a one-time use stream
+        const fetchRequest = event.request.clone();
+        
+        return fetch(fetchRequest)
+          .then(response => {
+            // Check if we received a valid response
+            if (!response || response.status !== 200 || response.type !== 'basic') {
+              return response;
+            }
+            
+            // Clone the response because it's a one-time use stream
+            const responseToCache = response.clone();
+            
+            caches.open(CACHE_NAME)
+              .then(cache => {
+                // Don't cache API calls or external resources
+                if (event.request.url.includes('/api/') || 
+                    !event.request.url.startsWith(self.location.origin)) {
+                  return;
+                }
+                cache.put(event.request, responseToCache);
+              });
+              
+            return response;
+          })
+          .catch(error => {
+            console.error('[Service Worker] Fetch failed:', error);
+            // You could return a custom offline page here
+            return new Response('Network error occurred', {
+              status: 503,
+              statusText: 'Service Unavailable',
+              headers: new Headers({
+                'Content-Type': 'text/plain'
+              })
+            });
+          });
+      })
+  );
 });
 
 // Active journey tracking
@@ -53,6 +131,8 @@ const MIN_UPDATE_INTERVAL = 5000; // Minimum 5 seconds between notification upda
 
 // Listen for messages from the main app
 self.addEventListener('message', (event) => {
+  console.log('[Service Worker] Message received:', event.data);
+  
   if (event.data && event.data.type === 'START_JOURNEY') {
     // Store journey data
     journeyData = event.data.journeyData;
@@ -79,6 +159,17 @@ self.addEventListener('message', (event) => {
       .then(notifications => {
         notifications.forEach(notification => notification.close());
       });
+  } else if (event.data && event.data.type === 'TEST_NOTIFICATION') {
+    // Send a test notification
+    self.registration.showNotification('OPEN TRAVEL - Test', {
+      body: 'This is a test notification',
+      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+      badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+      tag: 'test-notification',
+      renotify: true,
+      requireInteraction: true,
+      vibrate: [200, 100, 200]
+    });
   }
 });
 
@@ -98,11 +189,13 @@ function startJourney() {
   
   // Create the notification options
   const options = {
-    body: `${formattedTime} to ${destinationName}`,
+    body: `Your travel has started!`,
     icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
     badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
     tag: notificationTag,
-    renotify: false,
+    renotify: true,
+    silent: false,
+    vibrate: [200, 100, 200],
     requireInteraction: true,
     actions: [
       {
@@ -123,8 +216,17 @@ function startJourney() {
     }
   };
   
+  console.log('[Service Worker] Showing start journey notification');
+  
   // Show the notification
-  self.registration.showNotification('OpenTravel', options);
+  self.registration.showNotification('OPEN TRAVEL - Your travel has started!', options);
+  
+  // Schedule an update after a short delay to show the progress notification
+  setTimeout(() => {
+    if (journeyData) {
+      updateJourneyProgress(null, initialDistance * 0.95); // Start with a small progress
+    }
+  }, 3000);
 }
 
 // Update journey progress
@@ -141,13 +243,25 @@ function updateJourneyProgress(location, currentDistance) {
   const remainingTimeSeconds = currentDistance / speed;
   const remainingMinutes = Math.ceil(remainingTimeSeconds / 60);
   
+  // Create progress bar string (20 characters)
+  const progressBarLength = 20;
+  const filledLength = Math.round((progress / 100) * progressBarLength);
+  const emptyLength = progressBarLength - filledLength;
+  const progressBar = '█'.repeat(filledLength) + '░'.repeat(emptyLength);
+  
   // Format the message based on remaining time
   let message;
-  if (remainingMinutes <= 1) {
-    message = `Almost there!`;
+  if (currentDistance <= 10) {
+    message = `You have reached your destination!`;
+    showArrivalNotification();
+    return;
+  } else if (remainingMinutes <= 1) {
+    message = `Almost there! ${progressBar}`;
   } else {
-    message = `${remainingMinutes} min to ${journeyData.destinationName}`;
+    message = `Approx arrive ${remainingMinutes} mins\n${progressBar}`;
   }
+  
+  console.log('[Service Worker] Updating journey progress notification');
   
   // Get all existing notifications
   self.registration.getNotifications({ tag: notificationTag })
@@ -162,6 +276,7 @@ function updateJourneyProgress(location, currentDistance) {
         badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
         tag: notificationTag,
         renotify: true,
+        silent: true, // Silent updates for progress
         requireInteraction: true,
         actions: [
           {
@@ -183,32 +298,44 @@ function updateJourneyProgress(location, currentDistance) {
       };
       
       // Show the updated notification
-      self.registration.showNotification('OpenTravel', options);
+      self.registration.showNotification('OPEN TRAVEL - Approx arrive ' + remainingMinutes + ' mins', options);
+    });
+}
+
+// Show arrival notification
+function showArrivalNotification() {
+  if (!journeyData) return;
+  
+  console.log('[Service Worker] Showing arrival notification');
+  
+  // Close any existing journey notifications
+  self.registration.getNotifications({ tag: notificationTag })
+    .then(notifications => {
+      notifications.forEach(notification => notification.close());
       
-      // If we've reached the destination (within 10 meters), send arrival notification
-      if (currentDistance <= 10) {
-        // Show arrival notification with different tag to ensure it appears as a new notification
-        self.registration.showNotification('Destination Reached!', {
-          body: `You have arrived at ${journeyData.destinationName}`,
-          icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-          badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-          tag: 'opentravel-arrival',
-          vibrate: [200, 100, 200, 100, 200],
-          requireInteraction: true,
-          data: {
-            destinationName: journeyData.destinationName,
-            timestamp: Date.now()
-          }
-        });
-        
-        // Clear journey data
-        journeyData = null;
-      }
+      // Show arrival notification with different tag to ensure it appears as a new notification
+      self.registration.showNotification('OPEN TRAVEL - You have reached your destination!', {
+        body: `You have reached your destination!`,
+        icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        tag: 'opentravel-arrival',
+        vibrate: [200, 100, 200, 100, 200],
+        requireInteraction: true,
+        silent: false,
+        data: {
+          destinationName: journeyData.destinationName,
+          timestamp: Date.now()
+        }
+      });
+      
+      // Clear journey data
+      journeyData = null;
     });
 }
 
 // Handle notification clicks
 self.addEventListener('notificationclick', (event) => {
+  console.log('[Service Worker] Notification click received', event);
   event.notification.close();
   
   if (event.action === 'cancel') {
@@ -235,7 +362,7 @@ self.addEventListener('notificationclick', (event) => {
         }
         // Otherwise, open a new window
         if (self.clients.openWindow) {
-          return self.clients.openWindow('/');
+          return self.clients.openWindow('./');
         }
       })
     );
@@ -244,6 +371,7 @@ self.addEventListener('notificationclick', (event) => {
 
 // Handle push events (for web push notifications)
 self.addEventListener('push', (event) => {
+  console.log('[Service Worker] Push received', event);
   if (event.data) {
     try {
       const data = event.data.json();
@@ -256,42 +384,11 @@ self.addEventListener('push', (event) => {
       };
       
       event.waitUntil(
-        self.registration.showNotification(data.title || 'OpenTravel', options)
+        self.registration.showNotification(data.title || 'OPEN TRAVEL', options)
       );
     } catch (error) {
       console.error('Error processing push notification:', error);
     }
-  }
-});
-
-// Handle periodic sync for background updates
-self.addEventListener('periodicsync', (event) => {
-  if (event.tag === 'opentravel-update' && journeyData) {
-    event.waitUntil(
-      // Get the latest location and update the notification
-      new Promise((resolve) => {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const { latitude, longitude } = position.coords;
-            const distance = calculateDistance(
-              { latitude, longitude },
-              { latitude: journeyData.destination[0], longitude: journeyData.destination[1] }
-            );
-            updateJourneyProgress({ latitude, longitude }, distance);
-            resolve();
-          },
-          (error) => {
-            console.error('Error getting location in periodic sync:', error);
-            resolve();
-          },
-          {
-            enableHighAccuracy: true,
-            maximumAge: 0,
-            timeout: 5000
-          }
-        );
-      })
-    );
   }
 });
 
@@ -310,3 +407,6 @@ function calculateDistance(point1, point2) {
 
   return R * c; // Distance in meters
 }
+
+// Log that the service worker is loaded
+console.log('[Service Worker] Service worker loaded');
