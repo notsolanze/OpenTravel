@@ -1,60 +1,1718 @@
-{
-  "name": "OpenTravel",
-  "short_name": "OpenTravel",
-  "description": "Your journey companion",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#10B981",
-  "theme_color": "#10B981",
-  "icons": [
-    {
-      "src": "https://cdn-icons-png.flaticon.com/128/10473/10473293.png",
-      "sizes": "128x128",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "https://cdn-icons-png.flaticon.com/512/10473/10473293.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenTravel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/128/10740/10740579.png">
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#1F2937">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/128/10740/10740579.png">
+    <style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: #111827;
+            color: #F9FAFB;
+        }
+        .distance-badge {
+            position: fixed;
+            top: 75px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(31, 41, 55, 0.8);
+            color: #F9FAFB;
+            padding: 10px 16px;
+            border-radius: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            backdrop-filter: blur(4px);
+        }
+        #alertPopup {
+            z-index: 1000;
+        }
+        
+        /* Status bar */
+        .status-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background-color: rgba(17, 24, 39, 0.8);
+            backdrop-filter: blur(8px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px;
+            z-index: 1000;
+            color: white;
+        }
+        
+        /* Bottom sheet */
+        .bottom-sheet {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: #1F2937;
+            border-top-left-radius: 20px;
+            border-top-right-radius: 20px;
+            z-index: 1000;
+            box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+            transition: transform 0.3s ease;
+        }
+        .bottom-sheet-handle {
+            width: 40px;
+            height: 4px;
+            background-color: #6B7280;
+            border-radius: 2px;
+            margin: 12px auto;
+        }
+        .search-bar {
+            background-color: #374151;
+            border-radius: 9999px;
+            padding: 12px 20px;
+            margin: 0 16px 16px;
+            display: flex;
+            align-items: center;
+            color: #D1D5DB;
+        }
+        .quick-access {
+            display: flex;
+            justify-content: space-around;
+            padding: 0 16px 16px;
+        }
+        .quick-access-button {
+            background-color: #374151;
+            border-radius: 16px;
+            padding: 12px 20px;
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 30%;
+            color: #F9FAFB;
+        }
+        .recent-locations {
+            padding: 0 16px 16px;
+        }
+        .recent-location-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #374151;
+        }
+        .recent-location-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #374151;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 12px;
+        }
+        
+        /* Live Activity styles */
+        .live-activity {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 350px;
+            background-color: rgba(17, 24, 39, 0.9);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            color: white;
+            border-radius: 16px;
+            padding: 12px 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 1100;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.3s ease;
+        }
+        .live-activity.hidden {
+            transform: translate(-50%, 150%);
+            opacity: 0;
+        }
+        .live-activity.minimized {
+            width: 50px;
+            height: 50px;
+            border-radius: 25px;
+            padding: 0;
+            bottom: 20px;
+            right: 20px;
+            left: auto;
+            transform: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+        .live-activity-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .live-activity-app {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .live-activity-app-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            background-color: #10B981;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .live-activity-app-name {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        .live-activity-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 4px;
+        }
+        .live-activity-subtitle {
+            font-size: 0.9rem;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+        .live-activity-progress-container {
+            height: 4px;
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+            margin-bottom: 8px;
+        }
+        .live-activity-progress {
+            height: 100%;
+            background-color: #10B981;
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+        .live-activity-dot {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 8px;
+            height: 8px;
+            background-color: white;
+            border-radius: 50%;
+            transition: left 0.5s ease;
+        }
+        .live-activity-controls {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 4px;
+        }
+        .live-activity-button {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        .live-activity-button:hover {
+            color: white;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        .live-activity-content {
+            width: 100%;
+        }
+        .minimized-icon {
+            display: none;
+        }
+        .live-activity.minimized .minimized-icon {
+            display: block;
+        }
+        .live-activity.minimized .live-activity-content,
+        .live-activity.minimized .live-activity-controls {
+            display: none;
+        }
+        
+        /* Settings page */
+        .settings-page {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #111827;
+            z-index: 2000;
+            padding: 16px;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+        }
+        .settings-page.active {
+            transform: translateX(0);
+        }
+        .settings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .settings-section {
+            margin-bottom: 24px;
+        }
+        .settings-item {
+            padding: 16px;
+            background-color: #1F2937;
+            border-radius: 12px;
+            margin-bottom: 12px;
+        }
+        
+        /* Compass button */
+        .compass-button {
+            position: fixed;
+            bottom: 100px;
+            left: 20px;
+            width: 50px;
+            height: 50px;
+            background-color: rgba(31, 41, 55, 0.8);
+            backdrop-filter: blur(4px);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 900;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+        
+        /* Splash screen styles */
+        #splashScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #111827;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease-out;
+        }
+        .splash-logo {
+            width: 120px;
+            height: 120px;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+        .splash-title {
+            font-size: 2rem;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 10px;
+        }
+        .splash-subtitle {
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.8);
+        }
+        .splash-loader {
+            margin-top: 30px;
+            width: 200px;
+            height: 4px;
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+        }
+        .splash-loader-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 0%;
+            background-color: white;
+            border-radius: 2px;
+            animation: loading 2s ease-in-out forwards;
+        }
+        
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+        
+        @keyframes loading {
+            0% {
+                width: 0%;
+            }
+            100% {
+                width: 100%;
+            }
+        }
+        
+        /* Leaflet map dark mode */
+        .leaflet-tile {
+            filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.7);
+        }
+        .leaflet-container {
+            background: #111827;
+        }
+        
+        @media (prefers-color-scheme: dark) {
+          .notification {
+            background: #1a1a1a;
+            color: white;
+          }
+          .notification-progress {
+            background: rgba(255, 255, 255, 0.1);
+          }
+          .notification-progress-bar {
+            background: #00b14f;
+          }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+    <!-- Splash Screen -->
+    <div id="splashScreen">
+        <img src="https://cdn-icons-png.flaticon.com/512/10473/10473293.png" alt="OpenTravel Logo" class="splash-logo">
+        <h1 class="splash-title">OpenTravel</h1>
+        <p class="splash-subtitle">Your journey companion</p>
+        <div class="splash-loader">
+            <div class="splash-loader-bar"></div>
+        </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <div class="time font-semibold">04:00</div>
+        <div class="status-icons flex items-center gap-2">
+            <i data-lucide="navigation" class="w-4 h-4"></i>
+            <i data-lucide="wifi" class="w-4 h-4"></i>
+            <i data-lucide="battery" class="w-4 h-4"></i>
+        </div>
+    </div>
+
+    <!-- Main Map Container -->
+    <div id="map" class="h-screen w-full"></div>
+    
+    <!-- Compass Button -->
+    <div class="compass-button" id="compassButton">
+        <i data-lucide="compass" class="w-6 h-6 text-white"></i>
+    </div>
+    
+    <!-- Distance Badge -->
+    <div id="distance" class="distance-badge text-sm font-semibold text-white"></div>
+    
+    <!-- Bottom Sheet -->
+    <div class="bottom-sheet" id="bottomSheet">
+        <div class="bottom-sheet-handle" id="bottomSheetHandle"></div>
+        
+        <!-- Search Bar -->
+        <div class="search-bar" id="searchBar">
+            <i data-lucide="search" class="w-5 h-5 mr-3 text-gray-400"></i>
+            <span class="text-gray-400">Where to?</span>
+        </div>
+        
+        <!-- Quick Access Buttons -->
+        <div class="quick-access">
+            <button class="quick-access-button" id="homeButton">
+                <i data-lucide="home" class="w-5 h-5 text-orange-500"></i>
+                <span>Home</span>
+            </button>
+            <button class="quick-access-button" id="workButton">
+                <i data-lucide="briefcase" class="w-5 h-5 text-blue-500"></i>
+                <span>Work</span>
+            </button>
+            <button class="quick-access-button" id="newButton">
+                <i data-lucide="plus" class="w-5 h-5 text-cyan-500"></i>
+                <span>New</span>
+            </button>
+        </div>
+        
+        <!-- Recent Locations -->
+        <div class="recent-locations">
+            <h3 class="text-gray-400 text-sm mb-2">Recent</h3>
+            <div id="recentLocations">
+                <!-- Recent locations will be populated here -->
+            </div>
+        </div>
+    </div>
+    
+    <!-- Destination Input Modal -->
+    <div id="destinationModal" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-2000 hidden">
+        <div class="bg-gray-800 rounded-xl p-6 w-11/12 max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">Set Destination</h3>
+                <button id="closeDestinationModal" class="text-gray-400 hover:text-white">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+            <div class="mb-4">
+                <label for="destination" class="block text-sm font-medium text-gray-300 mb-1">Where are you going?</label>
+                <input type="text" id="destination" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 text-white" placeholder="Enter destination">
+            </div>
+            <div class="mb-4">
+                <label for="radius" class="block text-sm font-medium text-gray-300 mb-1">Alarm Radius (meters)</label>
+                <input type="number" id="radius" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 text-white" value="1000">
+            </div>
+            <div class="flex justify-center space-x-4">
+                <button id="setAlarm" class="bg-green-500 text-white p-3 rounded-full hover:bg-green-600 transition duration-300">
+                    <i data-lucide="bell" class="w-6 h-6"></i>
+                </button>
+                <button id="stopAlarm" class="bg-red-500 text-white p-3 rounded-full hover:bg-red-600 transition duration-300 hidden">
+                    <i data-lucide="bell-off" class="w-6 h-6"></i>
+                </button>
+            </div>
+            <p id="status" class="mt-4 text-sm text-gray-400 text-center"></p>
+        </div>
+    </div>
+    
+    <!-- Settings Page -->
+    <div id="settingsPage" class="settings-page">
+        <div class="settings-header">
+            <button id="backFromSettings" class="p-2 rounded-full hover:bg-gray-700 transition duration-300">
+                <i data-lucide="arrow-left" class="w-6 h-6"></i>
+            </button>
+            <h2 class="text-xl font-bold">Settings</h2>
+            <button id="resetSession" class="p-2 rounded-full hover:bg-gray-700 transition duration-300">
+                <i data-lucide="refresh-cw" class="w-6 h-6"></i>
+            </button>
+        </div>
+        
+        <!-- Saved Places Section -->
+        <div class="settings-section">
+            <h3 class="text-lg font-semibold mb-3">Saved Places</h3>
+            
+            <div class="settings-item">
+                <label for="homeAddress" class="block text-sm font-medium text-gray-300 mb-1">Home Address</label>
+                <div class="flex">
+                    <input type="text" id="homeAddress" class="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-l-lg focus:ring-green-500 focus:border-green-500 text-white" placeholder="Enter home address">
+                    <button id="saveHomeAddress" class="bg-green-500 text-white px-4 rounded-r-lg hover:bg-green-600">Save</button>
+                </div>
+            </div>
+            
+            <div class="settings-item">
+                <label for="workAddress" class="block text-sm font-medium text-gray-300 mb-1">Work Address</label>
+                <div class="flex">
+                    <input type="text" id="workAddress" class="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-l-lg focus:ring-green-500 focus:border-green-500 text-white" placeholder="Enter work address">
+                    <button id="saveWorkAddress" class="bg-green-500 text-white px-4 rounded-r-lg hover:bg-green-600">Save</button>
+                </div>
+            </div>
+            
+            <div class="settings-item">
+                <label for="favoritePlace" class="block text-sm font-medium text-gray-300 mb-1">Favorite Place</label>
+                <div class="flex">
+                    <input type="text" id="favoritePlace" class="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-l-lg focus:ring-green-500 focus:border-green-500 text-white" placeholder="Enter favorite place">
+                    <button id="saveFavoritePlace" class="bg-green-500 text-white px-4 rounded-r-lg hover:bg-green-600">Save</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Alarm Settings Section -->
+        <div class="settings-section">
+            <h3 class="text-lg font-semibold mb-3">Alarm Settings</h3>
+            
+            <div class="settings-item">
+                <label for="alarmSound" class="block text-sm font-medium text-gray-300 mb-1">Alarm Sound</label>
+                <select id="alarmSound" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 text-white">
+                    <option value="default">Default</option>
+                    <option value="chimes">Chimes</option>
+                    <option value="radar">Radar</option>
+                    <option value="beacon">Beacon</option>
+                    <option value="signal">Signal</option>
+                    <option value="bells">Bells</option>
+                    <option value="digital">Digital</option>
+                    <option value="alarm">Classic Alarm</option>
+                    <option value="siren">Siren</option>
+                </select>
+            </div>
+            
+            <div class="settings-item">
+                <label for="volume" class="block text-sm font-medium text-gray-300 mb-1">Alarm Volume</label>
+                <input type="range" id="volume" min="0" max="1" step="0.1" value="0.5" class="w-full">
+            </div>
+            
+            <div class="settings-item">
+                <label class="flex items-center">
+                    <input type="checkbox" id="enableNotifications" class="form-checkbox h-5 w-5 text-green-600 bg-gray-700 border-gray-600" checked>
+                    <span class="ml-2 text-gray-300">Enable Notifications</span>
+                </label>
+            </div>
+            
+            <div class="settings-item">
+                <label for="updateInterval" class="block text-sm font-medium text-gray-300 mb-1">Update Interval (seconds)</label>
+                <input type="number" id="updateInterval" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 text-white" value="30" min="10" max="300">
+            </div>
+        </div>
+        
+        <button id="saveSettings" class="w-full bg-green-500 text-white p-3 rounded-lg hover:bg-green-600 transition duration-300">
+            Save Settings
+        </button>
+    </div>
+    
+    <!-- Live Activity (iOS style) - Now with minimize/maximize functionality -->
+    <div id="liveActivity" class="live-activity hidden">
+        <!-- Minimized view icon -->
+        <div class="minimized-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+        </div>
+        
+        <!-- Full view content -->
+        <div class="live-activity-content">
+            <div class="live-activity-header">
+                <div class="live-activity-app">
+                    <div class="live-activity-app-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                    </div>
+                    <div class="live-activity-app-name">OpenTravel</div>
+                </div>
+            </div>
+            <div class="live-activity-title" id="liveActivityTitle">0 min to destination</div>
+            <div class="live-activity-subtitle" id="liveActivitySubtitle">Destination name</div>
+            <div class="live-activity-progress-container">
+                <div class="live-activity-progress" id="liveActivityProgress" style="width: 0%"></div>
+                <div class="live-activity-dot" id="liveActivityDot" style="left: 0%"></div>
+            </div>
+            <div class="live-activity-controls">
+                <button class="live-activity-button" id="minimizeActivity" title="Minimize">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"></path><path d="M21 8h-3a2 2 0 0 1-2-2V3"></path><path d="M3 16h3a2 2 0 0 1 2 2v3"></path><path d="M16 21v-3a2 2 0 0 1 2-2h3"></path></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <audio id="alarmAudio" loop>
+        <source src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+    
+    <div id="alertPopup" class="fixed top-16 left-1/2 transform -translate-x-1/2 bg-gray-800 rounded-lg shadow-lg p-4 transition-all duration-300 ease-in-out opacity-0 -translate-y-full max-w-sm w-full mx-4 border border-gray-700">
+        <div class="flex items-center gap-3">
+            <div id="alertIcon" class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"></div>
+            <div class="flex-1">
+                <h3 id="alertTitle" class="font-semibold text-white"></h3>
+                <p id="alertMessage" class="text-gray-300 text-sm"></p>
+            </div>
+            <button onclick="hideAlert()" class="flex-shrink-0 text-gray-400 hover:text-gray-200">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let map, userMarker, destinationMarker, circle;
+        let watchId, destination, alarmRadius;
+        let isAlarmPlaying = false;
+        let isAlarmActive = false;
+        let backgroundInterval;
+        let initialDistance = 0;
+        let journeyStartTime = null;
+        let serviceWorkerRegistration = null;
+        let isLiveActivityMinimized = false;
+        let recentLocations = [];
+        let bottomSheetHeight = 'partial'; // 'partial', 'full', 'minimized'
+        
+        // App state
+        let appState = {
+            isJourneyActive: false,
+            currentDestination: null,
+            currentRadius: null,
+            journeyStartTime: null,
+            destinationCoords: null,
+            savedPlaces: {
+                home: null,
+                work: null,
+                favorite: null
+            }
+        };
+
+        // Load settings from local storage
+        let settings = JSON.parse(localStorage.getItem('alarmSettings')) || {
+            alarmSound: 'default',
+            volume: 0.5,
+            enableNotifications: true,
+            updateInterval: 30,
+            savedPlaces: {
+                home: null,
+                work: null,
+                favorite: null
+            }
+        };
+        
+        // Check if there's a saved journey state
+        const savedState = localStorage.getItem('journeyState');
+        if (savedState) {
+            try {
+                const parsedState = JSON.parse(savedState);
+                if (parsedState.isJourneyActive) {
+                    appState = parsedState;
+                } else {
+                    // If no active journey, still load saved places
+                    appState.savedPlaces = parsedState.savedPlaces || appState.savedPlaces;
+                }
+            } catch (e) {
+                console.error('Error parsing saved journey state:', e);
+            }
+        }
+        
+        // Load recent locations
+        const savedRecentLocations = localStorage.getItem('recentLocations');
+        if (savedRecentLocations) {
+            try {
+                recentLocations = JSON.parse(savedRecentLocations);
+            } catch  {
+            try {
+                recentLocations = JSON.parse(savedRecentLocations);
+            } catch (e) {
+                console.error('Error parsing recent locations:', e);
+                recentLocations = [];
+            }
+        }
+        
+        // Register service worker immediately
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(function(registration) {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                        serviceWorkerRegistration = registration;
+                        
+                        // Force update the service worker
+                        registration.update();
+                        
+                        // Check if service worker is active
+                        if (registration.active) {
+                            console.log('Service worker is active');
+                            
+                            // If we have an active journey, restore it
+                            if (appState.isJourneyActive && appState.currentDestination) {
+                                // Restore journey state
+                                setTimeout(() => {
+                                    document.getElementById('status').textContent = 'Resuming your journey...';
+                                    setAlarm(true); // Pass true to indicate this is a resume
+                                }, 2500); // Wait for the app to initialize
+                            }
+                        } else {
+                            console.log('Service worker is not yet active');
+                            // Wait for the service worker to become active
+                            navigator.serviceWorker.ready.then(function(registration) {
+                                console.log('Service worker is now ready');
+                                serviceWorkerRegistration = registration;
+                            });
+                        }
+                    })
+                    .catch(function(err) {
+                        console.log('ServiceWorker registration failed: ', err);
+                        showAlert('Service worker registration failed. Some features may not work.', 'error');
+                    });
+            });
+        }
+        
+        // Handle splash screen
+        document.addEventListener('DOMContentLoaded', () => {
+            // Show splash screen for 2 seconds
+            setTimeout(() => {
+                const splashScreen = document.getElementById('splashScreen');
+                splashScreen.style.opacity = '0';
+                setTimeout(() => {
+                    splashScreen.style.display = 'none';
+                }, 500);
+            }, 2000);
+            
+            // Request notification permission immediately
+            if ('Notification' in window) {
+                if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === 'granted') {
+                            showAlert('Notifications enabled!', 'success');
+                        }
+                    });
+                }
+            }
+            
+            // Initialize the app
+            initApp();
+            
+            // Set up Live Activity minimize/maximize functionality
+            setupLiveActivityControls();
+            
+            // Set up bottom sheet functionality
+            setupBottomSheet();
+            
+            // Update clock
+            updateClock();
+            setInterval(updateClock, 60000);
+            
+            // Load saved places
+            loadSavedPlaces();
+            
+            // Populate recent locations
+            populateRecentLocations();
+        });
+        
+        // Update clock in status bar
+        function updateClock() {
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            document.querySelector('.time').textContent = `${hours}:${minutes}`;
+        }
+        
+        // Setup bottom sheet
+        function setupBottomSheet() {
+            const bottomSheet = document.getElementById('bottomSheet');
+            const handle = document.getElementById('bottomSheetHandle');
+            const searchBar = document.getElementById('searchBar');
+            let startY, startHeight, currentHeight;
+            
+            // Set initial height
+            bottomSheet.style.height = '230px';
+            
+            // Handle drag to resize
+            handle.addEventListener('touchstart', function(e) {
+                startY = e.touches[0].clientY;
+                startHeight = parseInt(bottomSheet.style.height);
+                document.body.style.overflow = 'hidden';
+            });
+            
+            handle.addEventListener('touchmove', function(e) {
+                const deltaY = startY - e.touches[0].clientY;
+                currentHeight = startHeight + deltaY;
+                
+                // Limit min and max height
+                if (currentHeight < 100) currentHeight = 100;
+                if (currentHeight > window.innerHeight - 100) currentHeight = window.innerHeight - 100;
+                
+                bottomSheet.style.height = currentHeight + 'px';
+            });
+            
+            handle.addEventListener('touchend', function() {
+                document.body.style.overflow = '';
+                
+                // Snap to positions
+                if (currentHeight < 150) {
+                    bottomSheet.style.height = '100px';
+                    bottomSheetHeight = 'minimized';
+                } else if (currentHeight < window.innerHeight / 2) {
+                    bottomSheet.style.height = '230px';
+                    bottomSheetHeight = 'partial';
+                } else {
+                    bottomSheet.style.height = (window.innerHeight - 100) + 'px';
+                    bottomSheetHeight = 'full';
+                }
+            });
+            
+            // Open destination modal when search bar is clicked
+            searchBar.addEventListener('click', function() {
+                document.getElementById('destinationModal').classList.remove('hidden');
+            });
+            
+            // Close destination modal
+            document.getElementById('closeDestinationModal').addEventListener('click', function() {
+                document.getElementById('destinationModal').classList.add('hidden');
+            });
+            
+            // Setup quick access buttons
+            document.getElementById('homeButton').addEventListener('click', function() {
+                if (appState.savedPlaces.home) {
+                    document.getElementById('destination').value = appState.savedPlaces.home.name;
+                    document.getElementById('destinationModal').classList.remove('hidden');
+                } else {
+                    showAlert('Home address not set. Please set it in settings.', 'info');
+                    openSettings();
+                }
+            });
+            
+            document.getElementById('workButton').addEventListener('click', function() {
+                if (appState.savedPlaces.work) {
+                    document.getElementById('destination').value = appState.savedPlaces.work.name;
+                    document.getElementById('destinationModal').classList.remove('hidden');
+                } else {
+                    showAlert('Work address not set. Please set it in settings.', 'info');
+                    openSettings();
+                }
+            });
+            
+            document.getElementById('newButton').addEventListener('click', function() {
+                document.getElementById('destination').value = '';
+                document.getElementById('destinationModal').classList.remove('hidden');
+            });
+        }
+        
+        // Setup Live Activity controls
+        function setupLiveActivityControls() {
+            const liveActivity = document.getElementById('liveActivity');
+            const minimizeBtn = document.getElementById('minimizeActivity');
+            
+            // Minimize button click
+            minimizeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                minimizeLiveActivity();
+            });
+            
+            // Click on minimized activity to maximize
+            liveActivity.addEventListener('click', () => {
+                if (isLiveActivityMinimized) {
+                    maximizeLiveActivity();
+                }
+            });
+        }
+        
+        // Minimize Live Activity
+        function minimizeLiveActivity() {
+            const liveActivity = document.getElementById('liveActivity');
+            liveActivity.classList.add('minimized');
+            isLiveActivityMinimized = true;
+        }
+        
+        // Maximize Live Activity
+        function maximizeLiveActivity() {
+            const liveActivity = document.getElementById('liveActivity');
+            liveActivity.classList.remove('minimized');
+            isLiveActivityMinimized = false;
+        }
+        
+        // Load saved places
+        function loadSavedPlaces() {
+            // Load from appState
+            if (appState.savedPlaces) {
+                if (appState.savedPlaces.home) {
+                    document.getElementById('homeAddress').value = appState.savedPlaces.home.name;
+                }
+                if (appState.savedPlaces.work) {
+                    document.getElementById('workAddress').value = appState.savedPlaces.work.name;
+                }
+                if (appState.savedPlaces.favorite) {
+                    document.getElementById('favoritePlace').value = appState.savedPlaces.favorite.name;
+                }
+            }
+        }
+        
+        // Populate recent locations
+        function populateRecentLocations() {
+            const recentLocationsContainer = document.getElementById('recentLocations');
+            recentLocationsContainer.innerHTML = '';
+            
+            if (recentLocations.length === 0) {
+                recentLocationsContainer.innerHTML = '<p class="text-gray-500 text-center py-4">No recent locations</p>';
+                return;
+            }
+            
+            // Show only the last 5 locations
+            const locationsToShow = recentLocations.slice(0, 5);
+            
+            locationsToShow.forEach(location => {
+                const locationItem = document.createElement('div');
+                locationItem.className = 'recent-location-item';
+                locationItem.innerHTML = `
+                    <div class="recent-location-icon">
+                        <i data-lucide="history" class="w-5 h-5"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="font-medium">${location.name}</div>
+                        <div class="text-sm text-gray-400">${location.address || ''}</div>
+                    </div>
+                `;
+                
+                locationItem.addEventListener('click', () => {
+                    document.getElementById('destination').value = location.name;
+                    document.getElementById('destinationModal').classList.remove('hidden');
+                });
+                
+                recentLocationsContainer.appendChild(locationItem);
+            });
+            
+            // Initialize icons
+            lucide.createIcons();
+        }
+        
+        // Add location to recent
+        function addToRecentLocations(location) {
+            // Check if location already exists
+            const existingIndex = recentLocations.findIndex(loc => loc.name === location.name);
+            
+            if (existingIndex !== -1) {
+                // Remove existing entry
+                recentLocations.splice(existingIndex, 1);
+            }
+            
+            // Add to beginning of array
+            recentLocations.unshift(location);
+            
+            // Limit to 10 recent locations
+            if (recentLocations.length > 10) {
+                recentLocations.pop();
+            }
+            
+            // Save to localStorage
+            localStorage.setItem('recentLocations', JSON.stringify(recentLocations));
+            
+            // Update UI
+            populateRecentLocations();
+        }
+        
+        // Initialize map
+        function initMap() {
+            map = L.map('map', {
+                zoomControl: false,
+                attributionControl: false
+            }).setView([14.5995, 120.9842], 15); // Manila coordinates
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenTravel'
+            }).addTo(map);
+            
+            // If we have a saved destination, show it on the map
+            if (appState.isJourneyActive && appState.currentDestination && appState.destinationCoords) {
+                destination = appState.destinationCoords;
+                
+                destinationMarker = L.marker(destination, {
+                    icon: L.divIcon({
+                        className: 'bg-green-500 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center',
+                        html: '<span class="text-white text-xs">📍</span>',
+                        iconSize: [24, 24]
+                    })
+                }).addTo(map);
+                
+                circle = L.circle(destination, { 
+                    radius: appState.currentRadius || 1000,
+                    color: '#10B981',
+                    fillColor: '#10B981',
+                    fillOpacity: 0.2
+                }).addTo(map);
+                
+                map.fitBounds(circle.getBounds());
+            }
+            
+            // Add compass button functionality
+            document.getElementById('compassButton').addEventListener('click', () => {
+                if (userMarker) {
+                    map.setView(userMarker.getLatLng(), 16);
+                }
+            });
+        }
+
+        // Play alarm
+        function playAlarm() {
+            if (!isAlarmPlaying) {
+                const audio = document.getElementById('alarmAudio');
+                audio.volume = settings.volume;
+                audio.play();
+                isAlarmPlaying = true;
+                console.log('Playing alarm sound');
+                
+                document.getElementById('stopAlarm').classList.remove('hidden');
+                document.getElementById('setAlarm').classList.add('hidden');
+                
+                // Vibrate if supported
+                if ('vibrate' in navigator) {
+                    navigator.vibrate([200, 100, 200]);
+                }
+            }
+        }
+
+        // Stop alarm
+        function stopAlarm() {
+            const audio = document.getElementById('alarmAudio');
+            audio.pause();
+            audio.currentTime = 0;
+            isAlarmPlaying = false;
+            isAlarmActive = false;
+            document.getElementById('stopAlarm').classList.add('hidden');
+            document.getElementById('setAlarm').classList.remove('hidden');
+            showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
+            
+            // Hide live activity
+            hideLiveActivity();
+            
+            // Stop journey in service worker
+            if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+                serviceWorkerRegistration.active.postMessage({
+                    type: 'STOP_JOURNEY'
+                });
+            }
+
+            // Clear background interval
+            if (backgroundInterval) {
+                clearInterval(backgroundInterval);
+            }
+            
+            // Clear journey state
+            appState.isJourneyActive = false;
+            localStorage.setItem('journeyState', JSON.stringify(appState));
+            
+            // Close destination modal
+            document.getElementById('destinationModal').classList.add('hidden');
+        }
+
+        // Update user location
+        function updateLocation(position) {
+            const { latitude, longitude } = position.coords;
+            
+            if (!userMarker) {
+                userMarker = L.marker([latitude, longitude], {
+                    icon: L.icon({
+                        iconUrl: 'https://cdn-icons-png.flaticon.com/128/10740/10740579.png',
+                        iconSize: [30, 30],
+                        iconAnchor: [15, 15]
+                    })
+                }).addTo(map);
+                map.setView([latitude, longitude], 16);
+            } else {
+                userMarker.setLatLng([latitude, longitude]);
+            }
+
+            if (destination && isAlarmActive) {
+                const distance = map.distance([latitude, longitude], destination);
+                
+                // Update distance display
+                updateDistanceDisplay(distance);
+                
+                // Update live activity
+                updateLiveActivity(distance);
+                
+                // Send location update to service worker
+                if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+                    serviceWorkerRegistration.active.postMessage({
+                        type: 'UPDATE_LOCATION',
+                        location: { latitude, longitude },
+                        distance: distance
+                    });
+                } else {
+                    console.log('Service worker not ready for location update');
+                }
+                
+                // Check if we've reached the destination
+                if (distance <= alarmRadius && !isAlarmPlaying) {
+                    playAlarm();
+                    document.getElementById('status').textContent = 'You have reached your destination!';
+                    document.getElementById('status').classList.add('text-green-500', 'font-semibold');
+                    
+                    // Clear journey state
+                    appState.isJourneyActive = false;
+                    localStorage.setItem('journeyState', JSON.stringify(appState));
+                }
+            }
+        }
+
+        // Calculate progress percentage
+        function calculateProgress(currentDistance) {
+            return Math.max(0, Math.min(100, ((initialDistance - currentDistance) / initialDistance) * 100));
+        }
+
+        // Update distance display
+        function updateDistanceDisplay(distance) {
+            const distanceText = `Distance: ${formatNumber(Math.round(distance))} meters`;
+            document.getElementById('distance').textContent = distanceText;
+        }
+
+        // Format number with commas
+        function formatNumber(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }
+
+        // Show live activity
+        function showLiveActivity() {
+            const liveActivity = document.getElementById('liveActivity');
+            liveActivity.classList.remove('hidden');
+            
+            // If it was previously minimized, keep it minimized
+            if (isLiveActivityMinimized) {
+                liveActivity.classList.add('minimized');
+            } else {
+                liveActivity.classList.remove('minimized');
+            }
+        }
+
+        // Hide live activity
+        function hideLiveActivity() {
+            const liveActivity = document.getElementById('liveActivity');
+            liveActivity.classList.add('hidden');
+        }
+
+        // Update live activity
+        function updateLiveActivity(currentDistance) {
+            if (!initialDistance) return;
+            
+            const progress = calculateProgress(currentDistance);
+            const progressBar = document.getElementById('liveActivityProgress');
+            const progressDot = document.getElementById('liveActivityDot');
+            const title = document.getElementById('liveActivityTitle');
+            const subtitle = document.getElementById('liveActivitySubtitle');
+            
+            // Update progress bar width
+            progressBar.style.width = `${progress}%`;
+            
+            // Update dot position
+            const dotPosition = Math.min(98, progress);
+            progressDot.style.left = `${dotPosition}%`;
+            
+            // Calculate remaining time
+            const speed = 5; // meters per second (walking speed)
+            const remainingTimeSeconds = currentDistance / speed;
+            const remainingMinutes = Math.ceil(remainingTimeSeconds / 60);
+            
+            // Update text
+            if (remainingMinutes <= 1) {
+                title.textContent = `Almost there!`;
+            } else {
+                title.textContent = `${remainingMinutes} min to destination`;
+            }
+            
+            // Update subtitle with destination name
+            subtitle.textContent = appState.currentDestination || 'Destination';
+            
+            // Show the live activity if it's hidden
+            showLiveActivity();
+        }
+
+        // Set alarm
+        function setAlarm(isResume = false) {
+            const destinationInput = document.getElementById('destination').value;
+            alarmRadius = parseInt(document.getElementById('radius').value);
+
+            if (!destinationInput) {
+                showAlert('Please enter a destination', 'error');
+                return;
+            }
+
+            // Check if service worker is ready
+            if (!serviceWorkerRegistration || !serviceWorkerRegistration.active) {
+                showAlert('Service worker not ready. Please wait a moment and try again.', 'error');
+                
+                // Try to register service worker again
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.register('./service-worker.js')
+                        .then(registration => {
+                            console.log('Service Worker registered with scope:', registration.scope);
+                            serviceWorkerRegistration = registration;
+                            showAlert('Service worker registered. Please try again.', 'success');
+                        })
+                        .catch(error => {
+                            console.error('Service Worker registration failed:', error);
+                            showAlert('Service worker registration failed. Please refresh the page.', 'error');
+                        });
+                }
+                
+                return;
+            }
+
+            // Force request notification permission if not already granted
+            if (Notification.permission !== "granted") {
+                Notification.requestPermission().then(permission => {
+                    if (permission === "granted") {
+                        proceedWithAlarmSetup(destinationInput, isResume);
+                    } else {
+                        showAlert('Notification permission is required for this app to work properly', 'error');
+                    }
+                });
+            } else {
+                proceedWithAlarmSetup(destinationInput, isResume);
+            }
+        }
+        
+        // Proceed with alarm setup after permission check
+        function proceedWithAlarmSetup(destinationInput, isResume) {
+            // If we're resuming and have coordinates, skip geocoding
+            if (isResume && appState.destinationCoords) {
+                destination = appState.destinationCoords;
+                setupJourney(destination, destinationInput);
+                return;
+            }
+            
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destinationInput)}, Philippines`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        destination = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                        setupJourney(destination, destinationInput);
+                        
+                        // Add to recent locations
+                        addToRecentLocations({
+                            name: destinationInput,
+                            address: data[0].display_name,
+                            coords: destination
+                        });
+                    } else {
+                        showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error geocoding destination:', error);
+                    showAlert('Error finding destination. Please try again.', 'error');
+                });
+        }
+        
+        // Setup journey after getting coordinates
+        function setupJourney(destCoords, destName) {
+            if (destinationMarker) map.removeLayer(destinationMarker);
+            if (circle) map.removeLayer(circle);
+            
+            destinationMarker = L.marker(destCoords, {
+                icon: L.divIcon({
+                    className: 'bg-green-500 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center',
+                    html: '<span class="text-white text-xs">📍</span>',
+                    iconSize: [24, 24]
+                })
+            }).addTo(map);
+            
+            circle = L.circle(destCoords, { 
+                radius: alarmRadius,
+                color: '#10B981',
+                fillColor: '#10B981',
+                fillOpacity: 0.2
+            }).addTo(map);
+            
+            map.fitBounds(circle.getBounds());
+
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+            }
+
+            // Get initial position to calculate initial distance
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    const { latitude, longitude } = position.coords;
+                    initialDistance = calculateDistance(
+                        { latitude, longitude },
+                        { latitude: destCoords[0], longitude: destCoords[1] }
+                    );
+                    
+                    // Start watching position
+                    watchId = navigator.geolocation.watchPosition(updateLocation, 
+                        error => {
+                            console.error('Error getting location:', error);
+                            showAlert('Unable to get your location. Please check your settings and try again.', 'error');
+                        },
+                        {
+                            enableHighAccuracy: true,
+                            maximumAge: 0,
+                            timeout: 5000
+                        }
+                    );
+                    
+                    document.getElementById('status').textContent = 'Alarm set. Monitoring location...';
+                    document.getElementById('status').classList.remove('text-green-500', 'font-semibold');
+                    
+                    // Save alarm settings
+                    settings.destination = destName;
+                    settings.radius = alarmRadius;
+                    localStorage.setItem('alarmSettings', JSON.stringify(settings));
+                    isAlarmActive = true;
+                    
+                    // Save journey state
+                    appState.isJourneyActive = true;
+                    appState.currentDestination = destName;
+                    appState.currentRadius = alarmRadius;
+                    appState.destinationCoords = destCoords;
+                    appState.journeyStartTime = Date.now();
+                    localStorage.setItem('journeyState', JSON.stringify(appState));
+                    
+                    // Show live activity
+                    showLiveActivity();
+                    updateLiveActivity(initialDistance);
+                    
+                    // Calculate estimated arrival time
+                    const speed = 5; // meters per second (walking speed)
+                    const estimatedTimeSeconds = initialDistance / speed;
+                    journeyStartTime = Date.now();
+                    const estimatedArrivalTime = new Date(journeyStartTime + (estimatedTimeSeconds * 1000));
+                    
+                    // Start journey in service worker
+                    if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+                        serviceWorkerRegistration.active.postMessage({
+                            type: 'START_JOURNEY',
+                            journeyData: {
+                                destination: destCoords,
+                                destinationName: destName,
+                                radius: alarmRadius,
+                                initialDistance: initialDistance,
+                                estimatedTime: estimatedArrivalTime.getTime(),
+                                speed: 5, // meters per second
+                                updateInterval: settings.updateInterval
+                            }
+                        });
+                        
+                        showAlert('Journey started! Check your notification tray.', 'success');
+                    } else {
+                        showAlert('Service worker not ready. Notifications may not work properly.', 'error');
+                    }
+                    
+                    // Close destination modal
+                    document.getElementById('destinationModal').classList.add('hidden');
+                },
+                error => {
+                    console.error('Error getting initial position:', error);
+                    showAlert('Unable to get your initial position. Please check your settings and try again.', 'error');
+                },
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 5000
+                }
+            );
+        }
+
+        // Calculate distance between two points
+        function calculateDistance(point1, point2) {
+            const R = 6371e3; // Earth's radius in meters
+            const φ1 = point1.latitude * Math.PI/180;
+            const φ2 = point2.latitude * Math.PI/180;
+            const Δφ = (point2.latitude - point1.latitude) * Math.PI/180;
+            const Δλ = (point2.longitude - point1.longitude) * Math.PI/180;
+
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                        Math.cos(φ1) * Math.cos(φ2) *
+                        Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+            return R * c; // Distance in meters
+        }
+
+        // Format distance
+        function formatDistance(meters) {
+            return meters > 1000 
+                ? `${(meters/1000).toFixed(1)} km` 
+                : `${Math.round(meters)} m`;
+        }
+        
+        // Open settings page
+        function openSettings() {
+            document.getElementById('settingsPage').classList.add('active');
+        }
+        
+        // Close settings page
+        function closeSettings() {
+            document.getElementById('settingsPage').classList.remove('active');
+        }
+
+        // Initialize the app
+        function initApp() {
+            initMap();
+            
+            // Set alarm button
+            document.getElementById('setAlarm').addEventListener('click', () => setAlarm(false));
+            
+            // Stop alarm button
+            document.getElementById('stopAlarm').addEventListener('click', stopAlarm);
+            
+            // Settings button
+            document.querySelector('.status-bar').addEventListener('click', openSettings);
+            
+            // Back from settings
+            document.getElementById('backFromSettings').addEventListener('click', closeSettings);
+            
+            // Save settings
+            document.getElementById('saveSettings').addEventListener('click', () => {
+                const newAlarmSound = document.getElementById('alarmSound').value;
+                const newVolume = parseFloat(document.getElementById('volume').value);
+                const newEnableNotifications = document.getElementById('enableNotifications').checked;
+                const newUpdateInterval = parseInt(document.getElementById('updateInterval').value);
+                
+                settings.alarmSound = newAlarmSound;
+                settings.volume = newVolume;
+                settings.enableNotifications = newEnableNotifications;
+                settings.updateInterval = newUpdateInterval;
+                
+                localStorage.setItem('alarmSettings', JSON.stringify(settings));
+                updateAlarmSound();
+                
+                if (newEnableNotifications && Notification.permission !== "granted") {
+                    Notification.requestPermission();
+                }
+                
+                showAlert('Settings saved successfully!', 'success');
+                closeSettings();
+            });
+            
+            // Reset session
+            document.getElementById('resetSession').addEventListener('click', () => {
+                if (confirm('Are you sure you want to reset all settings and saved locations?')) {
+                    localStorage.removeItem('alarmSettings');
+                    localStorage.removeItem('journeyState');
+                    localStorage.removeItem('recentLocations');
+                    
+                    settings = { 
+                        alarmSound: 'default', 
+                        volume: 0.5, 
+                        enableNotifications: true,
+                        updateInterval: 30,
+                        savedPlaces: {
+                            home: null,
+                            work: null,
+                            favorite: null
+                        }
+                    };
+                    
+                    appState = {
+                        isJourneyActive: false,
+                        currentDestination: null,
+                        currentRadius: null,
+                        journeyStartTime: null,
+                        destinationCoords: null,
+                        savedPlaces: {
+                            home: null,
+                            work: null,
+                            favorite: null
+                        }
+                    };
+                    
+                    recentLocations = [];
+                    
+                    document.getElementById('alarmSound').value = 'default';
+                    document.getElementById('volume').value = '0.5';
+                    document.getElementById('enableNotifications').checked = true;
+                    document.getElementById('updateInterval').value = '30';
+                    document.getElementById('homeAddress').value = '';
+                    document.getElementById('workAddress').value = '';
+                    document.getElementById('favoritePlace').value = '';
+                    
+                    updateAlarmSound();
+                    populateRecentLocations();
+                    
+                    showAlert('All settings and data have been reset!', 'success');
+                }
+            });
+            
+            // Save home address
+            document.getElementById('saveHomeAddress').addEventListener('click', () => {
+                const homeAddress = document.getElementById('homeAddress').value;
+                if (!homeAddress) {
+                    showAlert('Please enter a home address', 'error');
+                    return;
+                }
+                
+                // Geocode the address
+                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(homeAddress)}, Philippines`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.length > 0) {
+                            const coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                            appState.savedPlaces.home = {
+                                name: homeAddress,
+                                coords: coords,
+                                address: data[0].display_name
+                            };
+                            
+                            localStorage.setItem('journeyState', JSON.stringify(appState));
+                            showAlert('Home address saved!', 'success');
+                        } else {
+                            showAlert('Address not found. Please try a different address.', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error geocoding address:', error);
+                        showAlert('Error finding address. Please try again.', 'error');
+                    });
+            });
+            
+            // Save work address
+            document.getElementById('saveWorkAddress').addEventListener('click', () => {
+                const workAddress = document.getElementById('workAddress').value;
+                if (!workAddress) {
+                    showAlert('Please enter a work address', 'error');
+                    return;
+                }
+                
+                // Geocode the address
+                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(workAddress)}, Philippines`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.length > 0) {
+                            const coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                            appState.savedPlaces.work = {
+                                name: workAddress,
+                                coords: coords,
+                                address: data[0].display_name
+                            };
+                            
+                            localStorage.setItem('journeyState', JSON.stringify(appState));
+                            showAlert('Work address saved!', 'success');
+                        } else {
+                            showAlert('Address not found. Please try a different address.', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error geocoding address:', error);
+                        showAlert('Error finding address. Please try again.', 'error');
+                    });
+            });
+            
+            // Save favorite place
+            document.getElementById('saveFavoritePlace').addEventListener('click', () => {
+                const favoritePlace = document.getElementById('favoritePlace').value;
+                if (!favoritePlace) {
+                    showAlert('Please enter a favorite place', 'error');
+                    return;
+                }
+                
+                // Geocode the address
+                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(favoritePlace)}, Philippines`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.length > 0) {
+                            const coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+                            appState.savedPlaces.favorite = {
+                                name: favoritePlace,
+                                coords: coords,
+                                address: data[0].display_name
+                            };
+                            
+                            localStorage.setItem('journeyState', JSON.stringify(appState));
+                            showAlert('Favorite place saved!', 'success');
+                        } else {
+                            showAlert('Place not found. Please try a different place.', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error geocoding place:', error);
+                        showAlert('Error finding place. Please try again.', 'error');
+                    });
+            });
+
+            // Get initial user location
+            navigator.geolocation.getCurrentPosition(
+                updateLocation,
+                error => {
+                    console.error('Error getting initial location:', error);
+                    showAlert('Unable to get your initial location. Please check your settings and try again.', 'error');
+                },
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 5000
+                }
+            );
+
+            // Initialize Lucide icons
+            lucide.createIcons();
+            
+            // Listen for messages from the service worker
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                console.log('[Main] Message received from service worker:', event.data);
+                
+                if (event.data && event.data.type === 'JOURNEY_CANCELED') {
+                    stopAlarm();
+                    showAlert('Journey canceled', 'info');
+                } else if (event.data && event.data.type === 'PLAY_ALARM') {
+                    // Play alarm when service worker tells us to
+                    playAlarm();
+                    showAlert('You have reached your destination!', 'success');
+                } else if (event.data && event.data.type === 'ARRIVED_AT_DESTINATION') {
+                    // Handle arrival notification click
+                    document.getElementById('status').textContent = 'You have reached your destination!';
+                    document.getElementById('status').classList.add('text-green-500', 'font-semibold');
+                    
+                    // Clear journey state if not already done
+                    if (appState.isJourneyActive) {
+                        appState.isJourneyActive = false;
+                        localStorage.setItem('journeyState', JSON.stringify(appState));
+                    }
+                }
+            });
+        }
+
+        function updateAlarmSound() {
+            const audio = document.getElementById('alarmAudio');
+            switch (settings.alarmSound) {
+                case 'chimes':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3';
+                    break;
+                case 'radar':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2569/2569-preview.mp3';
+                    break;
+                case 'beacon':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2570/2570-preview.mp3';
+                    break;
+                case 'signal':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2908/2908-preview.mp3';
+                    break;
+                case 'bells':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2910/2910-preview.mp3';
+                    break;
+                case 'digital':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2573/2573-preview.mp3';
+                    break;
+                case 'alarm':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2574/2574-preview.mp3';
+                    break;
+                case 'siren':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2575/2575-preview.mp3';
+                    break;
+                default:
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3';
+            }
+            audio.volume = settings.volume;
+        }
+
+        function showAlert(message, type = 'error') {
+            const alertPopup = document.getElementById('alertPopup');
+            const alertMessage = document.getElementById('alertMessage');
+            const alertTitle = document.getElementById('alertTitle');
+            const alertIcon = document.getElementById('alertIcon');
+            
+            if (type === 'success') {
+                alertPopup.classList.add('border-l-4', 'border-green-500');
+                alertIcon.classList.add('bg-green-900');
+                alertIcon.innerHTML = '<i data-lucide="check" class="w-5 h-5 text-green-500"></i>';
+                alertTitle.textContent = 'Success!';
+            } else if (type === 'info') {
+                alertPopup.classList.add('border-l-4', 'border-blue-500');
+                alertIcon.classList.add('bg-blue-900');
+                alertIcon.innerHTML = '<i data-lucide="info" class="w-5 h-5 text-blue-500"></i>';
+                alertTitle.textContent = 'Information';
+            } else {
+                alertPopup.classList.add('border-l-4', 'border-red-500');
+                alertIcon.classList.add('bg-red-900');
+                alertIcon.innerHTML = '<i data-lucide="alert-circle" class="w-5 h-5 text-red-500"></i>';
+                alertTitle.textContent = 'Oh no!';
+            }
+            
+            alertMessage.textContent = message;
+            alertPopup.classList.remove('opacity-0', '-translate-y-full');
+            alertPopup.classList.add('opacity-100', 'translate-y-0');
+            
+            // Reinitialize Lucide icons for the new alert
+            lucide.createIcons();
+            
+            setTimeout(() => {
+                hideAlert();
+            }, 3000);
+        }
+
+        function hideAlert() {
+            const alertPopup = document.getElementById('alertPopup');
+            alertPopup.classList.remove('opacity-100', 'translate-y-0');
+            alertPopup.classList.add('opacity-0', '-translate-y-full');
+            alertPopup.classList.remove('border-l-4', 'border-green-500', 'border-red-500', 'border-blue-500');
+            document.getElementById('alertIcon').classList.remove('bg-green-900', 'bg-red-900', 'bg-blue-900');
+        }
     }
-  ],
-  "prefer_related_applications": false,
-  "related_applications": [],
-  "shortcuts": [
-    {
-      "name": "Set Alarm",
-      "short_name": "Alarm",
-      "description": "Quickly set a new travel alarm",
-      "url": "/?action=set_alarm",
-      "icons": [{ "src": "https://cdn-icons-png.flaticon.com/128/10473/10473293.png", "sizes": "128x128" }]
-    },
-    {
-      "name": "Settings",
-      "short_name": "Settings",
-      "description": "Adjust app settings",
-      "url": "/?action=settings",
-      "icons": [{ "src": "https://cdn-icons-png.flaticon.com/128/10473/10473293.png", "sizes": "128x128" }]
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "/placeholder.svg?height=640&width=320",
-      "sizes": "320x640",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "OpenTravel App - Main Screen"
-    },
-    {
-      "src": "/placeholder.svg?height=640&width=320",
-      "sizes": "320x640",
-      "type": "image/png",
-      "form_factor": "narrow",
-      "label": "OpenTravel App - Alarm Set"
-    }
-  ],
-  "categories": ["travel", "utilities"],
-  "lang": "en-US",
-  "dir": "ltr"
-}
+    </script>
+</body>
+</html>
