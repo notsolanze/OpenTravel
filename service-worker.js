@@ -124,10 +124,10 @@ self.addEventListener('fetch', (event) => {
 
 // Active journey tracking
 let journeyData = null;
-let notificationTag = 'opentravel-journey';
 let initialDistance = 0;
 let lastNotificationTime = 0;
-const MIN_UPDATE_INTERVAL = 10000; // Increase to 10 seconds between notification updates
+const MIN_UPDATE_INTERVAL = 30000; // Increase to 30 seconds between notification updates
+let activeNotification = null; // Track the active notification
 
 // Listen for messages from the main app
 self.addEventListener('message', (event) => {
@@ -155,21 +155,32 @@ self.addEventListener('message', (event) => {
     // Clear journey data
     journeyData = null;
     // Close any active notifications
-    self.registration.getNotifications()
-      .then(notifications => {
-        notifications.forEach(notification => notification.close());
-      });
+    if (activeNotification) {
+      activeNotification.close();
+      activeNotification = null;
+    }
   } else if (event.data && event.data.type === 'TEST_NOTIFICATION') {
     // Send a test notification
-    self.registration.showNotification('OPEN TRAVEL - Test', {
-      body: 'This is a test notification',
-      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-      badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-      tag: 'test-notification',
-      vibrate: [200, 100, 200]
-    });
+    showTestNotification();
   }
 });
+
+// Show a test notification
+function showTestNotification() {
+  // First, close any existing notifications
+  self.registration.getNotifications()
+    .then(notifications => {
+      notifications.forEach(notification => notification.close());
+      
+      // Then show a simple test notification
+      self.registration.showNotification('OPEN TRAVEL - Test', {
+        body: 'This is a test notification',
+        icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        tag: 'test-notification'
+      });
+    });
+}
 
 // Start journey and show initial notification
 function startJourney() {
@@ -181,32 +192,41 @@ function startJourney() {
       // Close all existing notifications
       notifications.forEach(notification => notification.close());
       
-      // Show the initial notification
+      // For iOS, we'll use a single notification that we'll update
+      // This mimics the Live Activity behavior as much as possible with web notifications
       const options = {
         body: `Your travel has started!`,
         icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
         badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-        tag: notificationTag,
+        tag: 'opentravel-journey', // Use a consistent tag
         vibrate: [200, 100, 200],
-        // Don't include actions on iOS as they're not well supported
+        requireInteraction: true, // Keep the notification visible
         data: {
           progress: 0,
           destinationName: journeyData.destinationName,
           timestamp: Date.now(),
-          initialDistance: initialDistance,
-          isJourneyNotification: true
+          initialDistance: initialDistance
         }
       };
       
       // Show the notification
-      self.registration.showNotification('OPEN TRAVEL - Your travel has started!', options);
-      
-      // Schedule an update after a short delay to show the progress notification
-      setTimeout(() => {
-        if (journeyData) {
-          updateJourneyProgress(null, initialDistance * 0.95); // Start with a small progress
-        }
-      }, 5000);
+      self.registration.showNotification('OPEN TRAVEL - Your travel has started!', options)
+        .then(() => {
+          // Get the notification we just created
+          return self.registration.getNotifications({tag: 'opentravel-journey'});
+        })
+        .then(notifications => {
+          if (notifications.length > 0) {
+            activeNotification = notifications[0];
+          }
+          
+          // Schedule an update after a short delay to show the progress notification
+          setTimeout(() => {
+            if (journeyData) {
+              updateJourneyProgress(null, initialDistance * 0.95); // Start with a small progress
+            }
+          }, 5000);
+        });
     });
 }
 
@@ -225,29 +245,26 @@ function updateJourneyProgress(location, currentDistance) {
   const remainingMinutes = Math.ceil(remainingTimeSeconds / 60);
   
   // Format the message based on remaining time
-  let message;
+  let title, message;
   if (currentDistance <= 10) {
+    title = 'OPEN TRAVEL - You have reached your destination!';
     message = `You have reached your destination!`;
     showArrivalNotification();
     return;
   } else if (remainingMinutes <= 1) {
+    title = 'OPEN TRAVEL - Almost there!';
     message = `Almost there!`;
   } else {
-    // Include a text-based progress bar for platforms that don't support visual progress
-    const progressBarLength = 10;
-    const filledLength = Math.round((progress / 100) * progressBarLength);
-    const emptyLength = progressBarLength - filledLength;
-    const progressBar = '█'.repeat(filledLength) + '░'.repeat(emptyLength);
-    
-    message = `Approx arrive ${remainingMinutes} mins\n${progressBar} ${Math.round(progress)}%`;
+    title = `OPEN TRAVEL - ${remainingMinutes} min to destination`;
+    message = `${journeyData.destinationName}`;
   }
   
   console.log('[Service Worker] Updating journey progress notification');
   
-  // First, close ALL existing notifications to prevent stacking
-  self.registration.getNotifications()
+  // Close any existing notifications with the same tag
+  self.registration.getNotifications({tag: 'opentravel-journey'})
     .then(notifications => {
-      // Close all existing notifications
+      // Close existing notifications
       notifications.forEach(notification => notification.close());
       
       // Create new notification options
@@ -255,21 +272,29 @@ function updateJourneyProgress(location, currentDistance) {
         body: message,
         icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
         badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-        tag: notificationTag,
-        vibrate: [100], // Very short vibration for updates
-        // Don't include actions on iOS as they're not well supported
+        tag: 'opentravel-journey',
+        silent: true, // Don't make sound for updates
+        requireInteraction: true, // Keep the notification visible
         data: {
           progress: progress / 100,
           destinationName: journeyData.destinationName,
           timestamp: Date.now(),
           initialDistance: initialDistance,
-          currentDistance: currentDistance,
-          isJourneyNotification: true
+          currentDistance: currentDistance
         }
       };
       
       // Show the updated notification
-      self.registration.showNotification('OPEN TRAVEL - Approx arrive ' + remainingMinutes + ' mins', options);
+      self.registration.showNotification(title, options)
+        .then(() => {
+          // Get the notification we just created
+          return self.registration.getNotifications({tag: 'opentravel-journey'});
+        })
+        .then(notifications => {
+          if (notifications.length > 0) {
+            activeNotification = notifications[0];
+          }
+        });
     });
 }
 
@@ -289,13 +314,16 @@ function showArrivalNotification() {
         body: `You have reached your destination!`,
         icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
         badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-        tag: notificationTag,
+        tag: 'opentravel-arrival', // Different tag for arrival notification
         vibrate: [200, 100, 200, 100, 200],
+        requireInteraction: false, // Auto dismiss after a while
         data: {
           destinationName: journeyData.destinationName,
-          timestamp: Date.now(),
-          isJourneyNotification: true
+          timestamp: Date.now()
         }
+      })
+      .then(() => {
+        activeNotification = null;
       });
       
       // Clear journey data
@@ -309,9 +337,6 @@ self.addEventListener('notificationclick', (event) => {
   
   // Close the notification
   event.notification.close();
-  
-  // Check if this is a journey notification
-  const isJourneyNotification = event.notification.data && event.notification.data.isJourneyNotification;
   
   // Open the app when notification is clicked
   event.waitUntil(
