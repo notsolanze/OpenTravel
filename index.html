@@ -67,9 +67,7 @@
             border-top-right-radius: 20px;
             z-index: 1000;
             box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
-            transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-            touch-action: none;
-            will-change: transform, height;
+            transition: transform 0.3s ease;
         }
         .bottom-sheet-handle {
             width: 40px;
@@ -77,10 +75,6 @@
             background-color: #6B7280;
             border-radius: 2px;
             margin: 12px auto;
-            cursor: grab;
-        }
-        .bottom-sheet-handle:active {
-            cursor: grabbing;
         }
         .search-bar {
             background-color: #374151;
@@ -464,11 +458,22 @@
     </div>
 
     <!-- Status Bar -->
-    
+    <div class="status-bar">
+        <div class="time font-semibold">04:00</div>
+        <div class="status-icons flex items-center gap-2 clickable">
+            <i data-lucide="navigation" class="w-4 h-4"></i>
+            <i data-lucide="wifi" class="w-4 h-4"></i>
+            <i data-lucide="battery" class="w-4 h-4"></i>
+        </div>
+    </div>
+
     <!-- Main Map Container -->
     <div id="map" class="h-screen w-full"></div>
     
     <!-- Compass Button -->
+    <div class="compass-button clickable" id="compassButton">
+        <i data-lucide="compass" class="w-6 h-6 text-white"></i>
+    </div>
     
     <!-- Distance Badge -->
     <div id="distance" class="distance-badge text-sm font-semibold text-white"></div>
@@ -476,16 +481,6 @@
     <!-- Bottom Sheet -->
     <div class="bottom-sheet" id="bottomSheet">
         <div class="bottom-sheet-handle clickable" id="bottomSheetHandle"></div>
-        
-        <!-- Navigation Controls -->
-        <div class="navigation-controls flex justify-between items-center px-4 mb-3">
-            <div class="flex items-center gap-2">
-                <button id="compassBtn" class="p-2 bg-gray-700 rounded-full clickable">
-                    <i data-lucide="compass" class="w-5 h-5 text-white"></i>
-                </button>
-            </div>
-            <div class="time font-semibold text-white">04:00</div>
-        </div>
         
         <!-- Search Bar -->
         <div class="search-bar clickable" id="searchBar">
