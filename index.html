@@ -337,6 +337,36 @@
             updateInterval: 30
         };
         
+        // Register service worker immediately
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(function(registration) {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                        serviceWorkerRegistration = registration;
+                        
+                        // Force update the service worker
+                        registration.update();
+                        
+                        // Check if service worker is active
+                        if (registration.active) {
+                            console.log('Service worker is active');
+                        } else {
+                            console.log('Service worker is not yet active');
+                            // Wait for the service worker to become active
+                            navigator.serviceWorker.ready.then(function(registration) {
+                                console.log('Service worker is now ready');
+                                serviceWorkerRegistration = registration;
+                            });
+                        }
+                    })
+                    .catch(function(err) {
+                        console.log('ServiceWorker registration failed: ', err);
+                        showAlert('Service worker registration failed. Some features may not work.', 'error');
+                    });
+            });
+        }
+        
         // Handle splash screen
         document.addEventListener('DOMContentLoaded', () => {
             // Show splash screen for 2 seconds
@@ -347,6 +377,20 @@
                     splashScreen.style.display = 'none';
                 }, 500);
             }, 2000);
+            
+            // Request notification permission immediately
+            if ('Notification' in window) {
+                if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === 'granted') {
+                            showAlert('Notifications enabled!', 'success');
+                        }
+                    });
+                }
+            }
+            
+            // Initialize the app
+            initApp();
         });
         
         // Initialize map
@@ -436,6 +480,8 @@
                         location: { latitude, longitude },
                         distance: distance
                     });
+                } else {
+                    console.log('Service worker not ready for location update');
                 }
                 
                 if (distance <= alarmRadius && !isAlarmPlaying) {
@@ -517,8 +563,29 @@
                 return;
             }
 
-            // Request notification permission if not already granted
-            if (settings.enableNotifications && Notification.permission !== "granted") {
+            // Check if service worker is ready
+            if (!serviceWorkerRegistration || !serviceWorkerRegistration.active) {
+                showAlert('Service worker not ready. Please wait a moment and try again.', 'error');
+                
+                // Try to register service worker again
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.register('./service-worker.js')
+                        .then(registration => {
+                            console.log('Service Worker registered with scope:', registration.scope);
+                            serviceWorkerRegistration = registration;
+                            showAlert('Service worker registered. Please try again.', 'success');
+                        })
+                        .catch(error => {
+                            console.error('Service Worker registration failed:', error);
+                            showAlert('Service worker registration failed. Please refresh the page.', 'error');
+                        });
+                }
+                
+                return;
+            }
+
+            // Force request notification permission if not already granted
+            if (Notification.permission !== "granted") {
                 Notification.requestPermission().then(permission => {
                     if (permission === "granted") {
                         proceedWithAlarmSetup(destinationInput);
@@ -617,6 +684,10 @@
                                             updateInterval: settings.updateInterval
                                         }
                                     });
+                                    
+                                    showAlert('Journey started! Check your notification tray.', 'success');
+                                } else {
+                                    showAlert('Service worker not ready. Notifications may not work properly.', 'error');
                                 }
                             },
                             error => {
@@ -663,7 +734,7 @@
         }
 
         // Initialize the app
-        document.addEventListener('DOMContentLoaded', () => {
+        function initApp() {
             initMap();
             document.getElementById('setAlarm').addEventListener('click', setAlarm);
             document.getElementById('stopAlarm').addEventListener('click', stopAlarm);
@@ -752,24 +823,7 @@
 
             // Initialize Lucide icons
             lucide.createIcons();
-
-            // Request notification permission if enabled
-            if (settings.enableNotifications) {
-                Notification.requestPermission();
-            }
-
-            // Register service worker
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/service-worker.js')
-                    .then(registration => {
-                        console.log('Service Worker registered with scope:', registration.scope);
-                        serviceWorkerRegistration = registration;
-                    })
-                    .catch(error => {
-                        console.error('Service Worker registration failed:', error);
-                    });
-            }
-
+            
             // Listen for messages from the service worker
             navigator.serviceWorker.addEventListener('message', (event) => {
                 if (event.data && event.data.type === 'JOURNEY_CANCELED') {
@@ -777,7 +831,33 @@
                     showAlert('Journey canceled', 'info');
                 }
             });
-        });
+            
+            // Add test notification button (for debugging)
+            const testButton = document.createElement('button');
+            testButton.textContent = 'Test Notification';
+            testButton.className = 'fixed bottom-4 right-4 bg-blue-500 text-white p-2 rounded-lg';
+            testButton.addEventListener('click', () => {
+                if (Notification.permission === "granted") {
+                    if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+                        serviceWorkerRegistration.active.postMessage({
+                            type: 'TEST_NOTIFICATION'
+                        });
+                        showAlert('Test notification sent', 'info');
+                    } else {
+                        showAlert('Service worker not ready', 'error');
+                    }
+                } else {
+                    Notification.requestPermission().then(permission => {
+                        if (permission === "granted") {
+                            showAlert('Notification permission granted, try again', 'success');
+                        } else {
+                            showAlert('Notification permission denied', 'error');
+                        }
+                    });
+                }
+            });
+            document.body.appendChild(testButton);
+        }
 
         function updateAlarmSound() {
             const audio = document.getElementById('alarmAudio');
