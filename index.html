@@ -191,7 +191,7 @@
             border-radius: 16px;
             padding: 12px 16px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            z-index: 1500; /* Increased z-index to ensure visibility */
+            z-index: 2500; /* Significantly increased z-index */
             display: flex;
             flex-direction: column;
             transition: all 0.3s ease;
@@ -315,7 +315,7 @@
             right: 0;
             bottom: 0;
             background-color: #111827;
-            z-index: 2000;
+            z-index: 2000; /* Keep this below the live activity z-index */
             padding: 16px;
             transform: translateX(100%);
             transition: transform 0.3s ease;
@@ -369,7 +369,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 1500; /* Increased z-index to be above other elements */
+            z-index: 2500; /* Significantly increased z-index */
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             cursor: pointer;
         }
@@ -1266,7 +1266,7 @@
     locationsToShow.forEach((location, index) => {
         const locationItem = document.createElement('div');
         locationItem.className = 'recent-location-item';
-        locationItem.dataset.index = index;
+        locationItem.dataset = index;
         
         // Create content container
         const contentContainer = document.createElement('div');
@@ -1576,6 +1576,11 @@ function deleteRecentLocation(index) {
             const liveActivity = document.getElementById('liveActivity');
             liveActivity.classList.remove('hidden');
             
+            // Force display and ensure it's visible
+            liveActivity.style.display = 'flex';
+            liveActivity.style.visibility = 'visible';
+            liveActivity.style.opacity = '1';
+            
             // If it was previously minimized, keep it minimized
             if (isLiveActivityMinimized) {
                 liveActivity.classList.add('minimized');
@@ -1583,9 +1588,7 @@ function deleteRecentLocation(index) {
                 liveActivity.classList.remove('minimized');
             }
             
-            // Force display
-            liveActivity.style.display = 'flex';
-            console.log('Live activity shown');
+            console.log('Live activity shown on map page');
         }
 
         // Hide live activity
@@ -1596,9 +1599,15 @@ function deleteRecentLocation(index) {
 
         // Update live activity
         function updateLiveActivity(currentDistance) {
-            if (!initialDistance) return;
+            if (!initialDistance) {
+                console.log('No initial distance set, cannot update live activity');
+                return;
+            }
             
             console.log('Updating live activity, distance:', currentDistance);
+            
+            // Force show the live activity first
+            showLiveActivity();
             
             const progress = calculateProgress(currentDistance);
             const progressBar = document.getElementById('liveActivityProgress');
@@ -1627,9 +1636,6 @@ function deleteRecentLocation(index) {
             
             // Update subtitle with destination name
             subtitle.textContent = appState.currentDestination || 'Destination';
-            
-            // Show the live activity if it's hidden
-            showLiveActivity();
         }
 
         // Set alarm
@@ -2094,6 +2100,39 @@ function deleteRecentLocation(index) {
 }
 
         function updateAlarmSound() {
+            const audio = document.getElementById('alarmAudio');
+            switch (settings.alarmSound) {
+                case 'chimes':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3';
+                    break;
+                case 'radar':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2569/2569-preview.mp3';
+                    break;
+                case 'beacon':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2570/2570-preview.mp3';
+                    break;
+                case 'signal':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2908/2908-preview.mp3';
+                    break;
+                case 'bells':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2910/2910-preview.mp3';
+                    break;
+                case 'digital':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2573/2573-preview.mp3';
+                    break;
+                case 'alarm':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2574/2574-preview.mp3';
+                    break;
+                case 'siren':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2575/2575-preview.mp3';
+                    break;
+                default:
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3';
+            }
+            audio.volume = settings.volume;
+        }
+
+        function showAlert(message, type = 'error') {
             const audio = document.getElementById('alarmAudio');
             switch (settings.alarmSound) {
                 case 'chimes':
