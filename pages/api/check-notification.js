@@ -17,17 +17,27 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   return R * c; // Distance in meters
 }
 
+// Helper function to calculate progress percentage
+function calculateProgress(currentDistance, initialDistance) {
+  return Math.max(0, Math.min(100, ((initialDistance - currentDistance) / initialDistance) * 100));
+}
+
 export default function handler(req, res) {
   try {
     const { method } = req;
 
     if (method === 'POST') {
       // Set a new alarm
-      const { userId, destination, radius } = JSON.parse(req.body);
+      const { userId, destination, radius, initialDistance } = JSON.parse(req.body);
       if (!userId || !destination || !radius) {
         return res.status(400).json({ error: 'Missing required parameters' });
       }
-      activeAlarms.set(userId, { destination, radius: Number(radius) });
+      activeAlarms.set(userId, { 
+        destination, 
+        radius: Number(radius),
+        initialDistance: initialDistance || 0,
+        startTime: Date.now()
+      });
       res.status(200).json({ message: 'Alarm set successfully' });
     } else if (method === 'GET') {
       // Check for notifications
@@ -43,7 +53,7 @@ export default function handler(req, res) {
         return res.status(200).json({ hasNotification: false });
       }
 
-      const { destination, radius } = userAlarm;
+      const { destination, radius, initialDistance, startTime } = userAlarm;
       const [currentLat, currentLon] = currentLocation.split(',').map(Number);
       
       const distance = calculateDistance(
@@ -51,15 +61,59 @@ export default function handler(req, res) {
         destination.latitude, destination.longitude
       );
 
+      // Calculate progress
+      const progress = calculateProgress(distance, initialDistance || distance * 2);
+      
+      // Calculate estimated time remaining
+      const speed = 5; // meters per second (walking speed)
+      const remainingTimeSeconds = distance / speed;
+      const remainingMinutes = Math.ceil(remainingTimeSeconds / 60);
+      
+      // Determine if we should show a notification
       const hasNotification = distance <= radius;
+      
+      // Format message based on distance
+      let message;
+      if (hasNotification) {
+        message = `You have reached your destination!`;
+      } else if (remainingMinutes <= 1) {
+        message = `Almost there!`;
+      } else {
+        message = `${remainingMinutes} min to destination`;
+      }
 
       res.status(200).json({
         hasNotification,
-        title: hasNotification ? "OpenTravel Destination Alert" : "",
-        message: hasNotification ? `You are within ${radius} meters of your destination!` : ""
+        title: "OpenTravel",
+        message,
+        progress,
+        distance,
+        remainingMinutes,
+        // Include data for the progress notification
+        notificationData: {
+          tag: 'opentravel-journey',
+          renotify: false,
+          requireInteraction: true,
+          silent: !hasNotification,
+          data: {
+            progress,
+            distance,
+            remainingMinutes,
+            timestamp: Date.now()
+          }
+        }
       });
+    } else if (method === 'DELETE') {
+      // Clear an alarm
+      const { userId } = JSON.parse(req.body);
+      if (!userId) {
+        return res.status(400).json({ error: 'Missing userId' });
+      }
+      
+      activeAlarms.delete(userId);
+      res.status(200).json({ message: 'Alarm cleared successfully' });
     } else {
-      res.setHeader('Allow', ['GET', 'POST']);
+      res.setHeader('Allow', ['GET', 'POST', 'DELETE']);
       res.status(405).end(`Method ${method} Not Allowed`);
     }
   } catch (error) {
