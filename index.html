@@ -10,7 +10,7 @@
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link rel="manifest" href="/manifest.json">
+    <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#10B981">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -328,6 +328,12 @@
         let initialDistance = 0;
         let journeyStartTime = null;
         let serviceWorkerRegistration = null;
+        let appState = {
+            isJourneyActive: false,
+            currentDestination: null,
+            currentRadius: null,
+            journeyStartTime: null
+        };
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
@@ -336,6 +342,19 @@
             enableNotifications: true,
             updateInterval: 30
         };
+        
+        // Check if there's a saved journey state
+        const savedState = localStorage.getItem('journeyState');
+        if (savedState) {
+            try {
+                const parsedState = JSON.parse(savedState);
+                if (parsedState.isJourneyActive) {
+                    appState = parsedState;
+                }
+            } catch (e) {
+                console.error('Error parsing saved journey state:', e);
+            }
+        }
         
         // Register service worker immediately
         if ('serviceWorker' in navigator) {
@@ -351,6 +370,17 @@
                         // Check if service worker is active
                         if (registration.active) {
                             console.log('Service worker is active');
+                            
+                            // If we have an active journey, restore it
+                            if (appState.isJourneyActive && appState.currentDestination) {
+                                // Restore journey state
+                                setTimeout(() => {
+                                    document.getElementById('destination').value = appState.currentDestination;
+                                    document.getElementById('radius').value = appState.currentRadius || 1000;
+                                    document.getElementById('status').textContent = 'Resuming your journey...';
+                                    setAlarm(true); // Pass true to indicate this is a resume
+                                }, 2500); // Wait for the app to initialize
+                            }
                         } else {
                             console.log('Service worker is not yet active');
                             // Wait for the service worker to become active
@@ -399,6 +429,28 @@
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenTravel'
             }).addTo(map);
+            
+            // If we have a saved destination, show it on the map
+            if (appState.isJourneyActive && appState.currentDestination && appState.destinationCoords) {
+                destination = appState.destinationCoords;
+                
+                destinationMarker = L.marker(destination, {
+                    icon: L.divIcon({
+                        className: 'bg-green-500 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center',
+                        html: '<span class="text-white text-xs">📍</span>',
+                        iconSize: [24, 24]
+                    })
+                }).addTo(map);
+                
+                circle = L.circle(destination, { 
+                    radius: appState.currentRadius || 1000,
+                    color: 'green',
+                    fillColor: '#3ce03c',
+                    fillOpacity: 0.2
+                }).addTo(map);
+                
+                map.fitBounds(circle.getBounds());
+            }
         }
 
         // Play alarm
@@ -445,6 +497,10 @@
             if (backgroundInterval) {
                 clearInterval(backgroundInterval);
             }
+            
+            // Clear journey state
+            appState.isJourneyActive = false;
+            localStorage.removeItem('journeyState');
         }
 
         // Update user location
@@ -488,6 +544,10 @@
                     playAlarm();
                     document.getElementById('status').textContent = 'You have reached your destination!';
                     document.getElementById('status').classList.add('text-green-600', 'font-semibold');
+                    
+                    // Clear journey state
+                    appState.isJourneyActive = false;
+                    localStorage.removeItem('journeyState');
                 }
             }
         }
@@ -554,7 +614,7 @@
         }
 
         // Set alarm
-        function setAlarm() {
+        function setAlarm(isResume = false) {
             const destinationInput = document.getElementById('destination').value;
             alarmRadius = parseInt(document.getElementById('radius').value);
 
@@ -588,118 +648,31 @@
             if (Notification.permission !== "granted") {
                 Notification.requestPermission().then(permission => {
                     if (permission === "granted") {
-                        proceedWithAlarmSetup(destinationInput);
+                        proceedWithAlarmSetup(destinationInput, isResume);
                     } else {
                         showAlert('Notification permission is required for this app to work properly', 'error');
                     }
                 });
             } else {
-                proceedWithAlarmSetup(destinationInput);
+                proceedWithAlarmSetup(destinationInput, isResume);
             }
         }
         
         // Proceed with alarm setup after permission check
-        function proceedWithAlarmSetup(destinationInput) {
+        function proceedWithAlarmSetup(destinationInput, isResume) {
+            // If we're resuming and have coordinates, skip geocoding
+            if (isResume && appState.destinationCoords) {
+                destination = appState.destinationCoords;
+                setupJourney(destination, destinationInput);
+                return;
+            }
+            
             fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destinationInput)}, Philippines`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.length > 0) {
                         destination = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-                        
-                        if (destinationMarker) map.removeLayer(destinationMarker);
-                        if (circle) map.removeLayer(circle);
-                        
-                        destinationMarker = L.marker(destination, {
-                            icon: L.divIcon({
-                                className: 'bg-green-500 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center',
-                                html: '<span class="text-white text-xs">📍</span>',
-                                iconSize: [24, 24]
-                            })
-                        }).addTo(map);
-                        
-                        circle = L.circle(destination, { 
-                            radius: alarmRadius,
-                            color: 'green',
-                            fillColor: '#3ce03c',
-                            fillOpacity: 0.2
-                        }).addTo(map);
-                        
-                        map.fitBounds(circle.getBounds());
-
-                        if (watchId) {
-                            navigator.geolocation.clearWatch(watchId);
-                        }
-
-                        // Get initial position to calculate initial distance
-                        navigator.geolocation.getCurrentPosition(
-                            position => {
-                                const { latitude, longitude } = position.coords;
-                                initialDistance = calculateDistance(
-                                    { latitude, longitude },
-                                    { latitude: destination[0], longitude: destination[1] }
-                                );
-                                
-                                // Start watching position
-                                watchId = navigator.geolocation.watchPosition(updateLocation, 
-                                    error => {
-                                        console.error('Error getting location:', error);
-                                        showAlert('Unable to get your location. Please check your settings and try again.', 'error');
-                                    },
-                                    {
-                                        enableHighAccuracy: true,
-                                        maximumAge: 0,
-                                        timeout: 5000
-                                    }
-                                );
-                                
-                                document.getElementById('status').textContent = 'Alarm set. Monitoring location...';
-                                document.getElementById('status').classList.remove('text-green-600', 'font-semibold');
-                                
-                                // Save alarm settings
-                                settings.destination = destinationInput;
-                                settings.radius = alarmRadius;
-                                sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
-                                isAlarmActive = true;
-                                
-                                // Show progress notification
-                                showProgressNotification();
-                                
-                                // Calculate estimated arrival time
-                                const speed = 5; // meters per second (walking speed)
-                                const estimatedTimeSeconds = initialDistance / speed;
-                                journeyStartTime = Date.now();
-                                const estimatedArrivalTime = new Date(journeyStartTime + (estimatedTimeSeconds * 1000));
-                                
-                                // Start journey in service worker
-                                if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
-                                    serviceWorkerRegistration.active.postMessage({
-                                        type: 'START_JOURNEY',
-                                        journeyData: {
-                                            destination: destination,
-                                            destinationName: destinationInput,
-                                            radius: alarmRadius,
-                                            initialDistance: initialDistance,
-                                            estimatedTime: estimatedArrivalTime.getTime(),
-                                            speed: 5, // meters per second
-                                            updateInterval: settings.updateInterval
-                                        }
-                                    });
-                                    
-                                    showAlert('Journey started! Check your notification tray.', 'success');
-                                } else {
-                                    showAlert('Service worker not ready. Notifications may not work properly.', 'error');
-                                }
-                            },
-                            error => {
-                                console.error('Error getting initial position:', error);
-                                showAlert('Unable to get your initial position. Please check your settings and try again.', 'error');
-                            },
-                            {
-                                enableHighAccuracy: true,
-                                maximumAge: 0,
-                                timeout: 5000
-                            }
-                        );
+                        setupJourney(destination, destinationInput);
                     } else {
                         showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
                     }
@@ -708,6 +681,112 @@
                     console.error('Error geocoding destination:', error);
                     showAlert('Error finding destination. Please try again.', 'error');
                 });
+        }
+        
+        // Setup journey after getting coordinates
+        function setupJourney(destCoords, destName) {
+            if (destinationMarker) map.removeLayer(destinationMarker);
+            if (circle) map.removeLayer(circle);
+            
+            destinationMarker = L.marker(destCoords, {
+                icon: L.divIcon({
+                    className: 'bg-green-500 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center',
+                    html: '<span class="text-white text-xs">📍</span>',
+                    iconSize: [24, 24]
+                })
+            }).addTo(map);
+            
+            circle = L.circle(destCoords, { 
+                radius: alarmRadius,
+                color: 'green',
+                fillColor: '#3ce03c',
+                fillOpacity: 0.2
+            }).addTo(map);
+            
+            map.fitBounds(circle.getBounds());
+
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+            }
+
+            // Get initial position to calculate initial distance
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    const { latitude, longitude } = position.coords;
+                    initialDistance = calculateDistance(
+                        { latitude, longitude },
+                        { latitude: destCoords[0], longitude: destCoords[1] }
+                    );
+                    
+                    // Start watching position
+                    watchId = navigator.geolocation.watchPosition(updateLocation, 
+                        error => {
+                            console.error('Error getting location:', error);
+                            showAlert('Unable to get your location. Please check your settings and try again.', 'error');
+                        },
+                        {
+                            enableHighAccuracy: true,
+                            maximumAge: 0,
+                            timeout: 5000
+                        }
+                    );
+                    
+                    document.getElementById('status').textContent = 'Alarm set. Monitoring location...';
+                    document.getElementById('status').classList.remove('text-green-600', 'font-semibold');
+                    
+                    // Save alarm settings
+                    settings.destination = destName;
+                    settings.radius = alarmRadius;
+                    sessionStorage.setItem('alarmSettings', JSON.stringify(settings));
+                    isAlarmActive = true;
+                    
+                    // Save journey state
+                    appState.isJourneyActive = true;
+                    appState.currentDestination = destName;
+                    appState.currentRadius = alarmRadius;
+                    appState.destinationCoords = destCoords;
+                    appState.journeyStartTime = Date.now();
+                    localStorage.setItem('journeyState', JSON.stringify(appState));
+                    
+                    // Show progress notification
+                    showProgressNotification();
+                    
+                    // Calculate estimated arrival time
+                    const speed = 5; // meters per second (walking speed)
+                    const estimatedTimeSeconds = initialDistance / speed;
+                    journeyStartTime = Date.now();
+                    const estimatedArrivalTime = new Date(journeyStartTime + (estimatedTimeSeconds * 1000));
+                    
+                    // Start journey in service worker
+                    if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+                        serviceWorkerRegistration.active.postMessage({
+                            type: 'START_JOURNEY',
+                            journeyData: {
+                                destination: destCoords,
+                                destinationName: destName,
+                                radius: alarmRadius,
+                                initialDistance: initialDistance,
+                                estimatedTime: estimatedArrivalTime.getTime(),
+                                speed: 5, // meters per second
+                                updateInterval: settings.updateInterval
+                            }
+                        });
+                        
+                        showAlert('Journey started! Check your notification tray.', 'success');
+                    } else {
+                        showAlert('Service worker not ready. Notifications may not work properly.', 'error');
+                    }
+                },
+                error => {
+                    console.error('Error getting initial position:', error);
+                    showAlert('Unable to get your initial position. Please check your settings and try again.', 'error');
+                },
+                {
+                    enableHighAccuracy: true,
+                    maximumAge: 0,
+                    timeout: 5000
+                }
+            );
         }
 
         // Calculate distance between two points
@@ -736,7 +815,7 @@
         // Initialize the app
         function initApp() {
             initMap();
-            document.getElementById('setAlarm').addEventListener('click', setAlarm);
+            document.getElementById('setAlarm').addEventListener('click', () => setAlarm(false));
             document.getElementById('stopAlarm').addEventListener('click', stopAlarm);
             document.getElementById('closeProgressNotification').addEventListener('click', hideProgressNotification);
 
@@ -782,6 +861,7 @@
 
             document.getElementById('resetSession').addEventListener('click', () => {
                 sessionStorage.removeItem('alarmSettings');
+                localStorage.removeItem('journeyState');
                 settings = { 
                     alarmSound: 'default', 
                     volume: 0.5, 
@@ -799,10 +879,10 @@
             });
 
             // Load saved settings
-            if (settings.destination) {
+            if (settings.destination && !appState.isJourneyActive) {
                 document.getElementById('destination').value = settings.destination;
             }
-            if (settings.radius) {
+            if (settings.radius && !appState.isJourneyActive) {
                 document.getElementById('radius').value = settings.radius;
             }
             updateAlarmSound();
