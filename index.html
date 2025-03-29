@@ -553,6 +553,45 @@
             margin-left: 12px;
             flex-shrink: 0;
         }
+        .recent-location-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid #374151;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.3s ease;
+    touch-action: pan-y;
+}
+
+.recent-location-content {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    transform: translateX(0);
+    transition: transform 0.3s ease;
+    background-color: #1F2937;
+    z-index: 1;
+}
+
+.delete-button {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    background-color: #EF4444;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 70px;
+    z-index: 0;
+}
+
+.recent-location-item.swiped .recent-location-content {
+    transform: translateX(-70px);
+}
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -751,7 +790,6 @@
                     <input type="checkbox" id="enableNotifications" class="form-checkbox h-5 w-5 text-green-600 bg-gray-700 border-gray-600" checked>
                     <span class="ml-2 text-gray-300">Enable Notifications</span>
                 </label>
-            </div>
             
             <div class="settings-item">
                 <label for="updateInterval" class="block text-sm font-medium text-gray-300 mb-1">Update Interval (seconds)</label>
@@ -1231,43 +1269,123 @@
         
         // Populate recent locations
         function populateRecentLocations() {
-            const recentLocationsContainer = document.getElementById('recentLocations');
-            recentLocationsContainer.innerHTML = '';
-            
-            if (recentLocations.length === 0) {
-                recentLocationsContainer.innerHTML = '<p class="text-gray-500 text-center py-4">No recent locations</p>';
-                return;
-            }
-            
-            // Show only the last 5 locations
-            const locationsToShow = recentLocations.slice(0, 5);
-            
-            locationsToShow.forEach(location => {
-                const locationItem = document.createElement('div');
-                locationItem.className = 'recent-location-item clickable';
-                locationItem.innerHTML = `
-                    <div class="recent-location-icon">
-                        <i data-lucide="history" class="w-5 h-5"></i>
-                    </div>
-                    <div class="flex-1">
-                        <div class="font-medium">${location.name}</div>
-                        <div class="text-sm text-gray-400">${location.address || ''}</div>
-                    </div>
-                `;
-                
-                locationItem.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    console.log('Recent location clicked:', location.name);
-                    document.getElementById('destination').value = location.name;
-                    document.getElementById('destinationModal').classList.remove('hidden');
-                });
-                
-                recentLocationsContainer.appendChild(locationItem);
-            });
-            
-            // Initialize icons
-            lucide.createIcons();
+    const recentLocationsContainer = document.getElementById('recentLocations');
+    recentLocationsContainer.innerHTML = '';
+    
+    if (recentLocations.length === 0) {
+        recentLocationsContainer.innerHTML = '<p class="text-gray-500 text-center py-4">No recent locations</p>';
+        return;
+    }
+    
+    // Show only the last 5 locations
+    const locationsToShow = recentLocations.slice(0, 5);
+    
+    locationsToShow.forEach((location, index) => {
+        const locationItem = document.createElement('div');
+        locationItem.className = 'recent-location-item';
+        locationItem.dataset.index = index;
+        
+        // Create content container
+        const contentContainer = document.createElement('div');
+        contentContainer.className = 'recent-location-content';
+        
+        contentContainer.innerHTML = `
+            <div class="recent-location-icon">
+                <i data-lucide="history" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1">
+                <div class="font-medium">${location.name}</div>
+                <div class="text-sm text-gray-400">${location.address || ''}</div>
+            </div>
+        `;
+        
+        // Create delete button
+        const deleteButton = document.createElement('div');
+        deleteButton.className = 'delete-button';
+        deleteButton.innerHTML = '<i data-lucide="trash-2" class="w-5 h-5"></i>';
+        
+        // Add elements to the item
+        locationItem.appendChild(contentContainer);
+        locationItem.appendChild(deleteButton);
+        
+        // Add touch event listeners for swipe
+        setupSwipeToDelete(locationItem);
+        
+        // Add click event for the content
+        contentContainer.addEventListener('click', (e) => {
+            e.stopPropagation();
+            console.log('Recent location clicked:', location.name);
+            document.getElementById('destination').value = location.name;
+            document.getElementById('destinationModal').classList.remove('hidden');
+        });
+        
+        // Add click event for delete button
+        deleteButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteRecentLocation(index);
+        });
+        
+        recentLocationsContainer.appendChild(locationItem);
+    });
+    
+    // Initialize icons
+    lucide.createIcons();
+}
+
+function setupSwipeToDelete(element) {
+    let startX = 0;
+    let currentX = 0;
+    let isSwiping = false;
+    
+    element.addEventListener('touchstart', (e) => {
+        startX = e.touches[0].clientX;
+        isSwiping = true;
+        // Reset any previous transform
+        element.classList.remove('swiped');
+    });
+    
+    element.addEventListener('touchmove', (e) => {
+        if (!isSwiping) return;
+        
+        currentX = e.touches[0].clientX;
+        const diffX = currentX - startX;
+        
+        // Only allow left swipe (negative diffX)
+        if (diffX < 0 && diffX > -70) {
+            element.querySelector('.recent-location-content').style.transform = `translateX(${diffX}px)`;
         }
+    });
+    
+    element.addEventListener('touchend', (e) => {
+        if (!isSwiping) return;
+        
+        const diffX = currentX - startX;
+        
+        // If swiped more than 40px to the left, keep it open
+        if (diffX < -40) {
+            element.classList.add('swiped');
+        } else {
+            element.classList.remove('swiped');
+            element.querySelector('.recent-location-content').style.transform = '';
+        }
+        
+        isSwiping = false;
+    });
+}
+
+function deleteRecentLocation(index) {
+    // Remove the item from the array
+    recentLocations.splice(index, 1);
+    
+    // Save to localStorage
+    localStorage.setItem('recentLocations', JSON.stringify(recentLocations));
+    
+    // Update UI
+    populateRecentLocations();
+    
+    // Show confirmation
+    showAlert('Location removed from history', 'success');
+}
         
         // Add location to recent
         function addToRecentLocations(location) {
