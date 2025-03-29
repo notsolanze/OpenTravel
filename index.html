@@ -51,9 +51,9 @@
             border-top-right-radius: 20px;
             z-index: 1000;
             box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
-            transition: transform 0.3s ease;
             height: 230px; /* Default height */
-            transform: translateY(0);
+            overflow: hidden;
+            touch-action: none;
         }
         .bottom-sheet-handle {
             width: 40px;
@@ -62,8 +62,10 @@
             border-radius: 2px;
             margin: 12px auto;
             cursor: grab;
+            touch-action: none;
         }
-        .bottom-sheet-handle:active {
+        .bottom-sheet-handle.active {
+            background-color: #10B981;
             cursor: grabbing;
         }
         .search-bar {
@@ -830,170 +832,173 @@
         }
         
         // Setup bottom sheet
-        function setupBottomSheet() {
-            const bottomSheet = document.getElementById('bottomSheet');
-            const handle = document.getElementById('bottomSheetHandle');
-            const searchBar = document.getElementById('searchBar');
-            
-            // Define snap points
-            const snapPoints = {
-                minimized: 100,
-                partial: 230,
-                full: window.innerHeight - 100
-            };
-            
-            let startY, startTranslateY;
-            let isDragging = false;
-            
-            // Touch events for mobile
-            handle.addEventListener('touchstart', handleDragStart);
-            document.addEventListener('touchmove', handleDragMove);
-            document.addEventListener('touchend', handleDragEnd);
-            
-            // Mouse events for desktop
-            handle.addEventListener('mousedown', handleDragStart);
-            document.addEventListener('mousemove', handleDragMove);
-            document.addEventListener('mouseup', handleDragEnd);
-            
-            function handleDragStart(e) {
-                isDragging = true;
-                startY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
-                
-                // Get current transform
-                const style = window.getComputedStyle(bottomSheet);
-                const transform = style.transform || style.webkitTransform;
-                const translateY = transform !== 'none' ? 
-                    parseInt(transform.split(',')[1].trim().replace('px', '')) : 0;
-                
-                startTranslateY = translateY;
-                
-                // Prevent default to avoid scrolling while dragging
-                e.preventDefault();
-                document.body.style.overflow = 'hidden';
-            }
-            
-            function handleDragMove(e) {
-                if (!isDragging) return;
-                
-                const currentY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
-                const deltaY = currentY - startY;
-                
-                // Calculate new translateY
-                let newTranslateY = startTranslateY + deltaY;
-                
-                // Limit the drag range
-                const maxTranslateY = snapPoints.partial - snapPoints.minimized;
-                const minTranslateY = snapPoints.partial - snapPoints.full;
-                
-                if (newTranslateY > maxTranslateY) newTranslateY = maxTranslateY;
-                if (newTranslateY < minTranslateY) newTranslateY = minTranslateY;
-                
-                // Apply transform
-                bottomSheet.style.transform = `translateY(${newTranslateY}px)`;
-                
-                // Prevent default to avoid scrolling while dragging
-                e.preventDefault();
-            }
-            
-            function handleDragEnd(e) {
-                if (!isDragging) return;
-                isDragging = false;
-                document.body.style.overflow = '';
-                
-                // Get current transform
-                const style = window.getComputedStyle(bottomSheet);
-                const transform = style.transform || style.webkitTransform;
-                const translateY = transform !== 'none' ? 
-                    parseInt(transform.split(',')[1].trim().replace('px', '')) : 0;
-                
-                // Determine which snap point to go to
-                let targetTranslateY;
-                
-                if (translateY > (snapPoints.partial - snapPoints.minimized) * 0.5) {
-                    // Snap to minimized
-                    targetTranslateY = snapPoints.partial - snapPoints.minimized;
-                } else if (translateY < (snapPoints.partial - snapPoints.full) * 0.5) {
-                    // Snap to full
-                    targetTranslateY = snapPoints.partial - snapPoints.full;
-                } else {
-                    // Snap to partial
-                    targetTranslateY = 0;
-                }
-                
-                // Animate to snap point
-                bottomSheet.style.transition = 'transform 0.3s ease';
-                bottomSheet.style.transform = `translateY(${targetTranslateY}px)`;
-                
-                // Reset transition after animation
-                setTimeout(() => {
-                    bottomSheet.style.transition = '';
-                }, 300);
-            }
-            
-            // Open destination modal when search bar is clicked
-            searchBar.addEventListener('click', function(e) {
-                e.stopPropagation();
-                console.log("Search bar clicked!");
-                document.getElementById('destinationModal').classList.remove('hidden');
-            });
-            
-            // Close destination modal - both X button and Cancel button
-            document.getElementById('closeDestinationModal').addEventListener('click', function(e) {
-                e.stopPropagation();
-                document.getElementById('destinationModal').classList.add('hidden');
-            });
-            document.getElementById('cancelDestinationBtn').addEventListener('click', function(e) {
-                e.stopPropagation();
-                document.getElementById('destinationModal').classList.add('hidden');
-            });
-            
-            // Setup quick access buttons with debug logging
-            document.getElementById('homeButton').addEventListener('click', function(e) {
-                e.stopPropagation();
-                console.log('Home button clicked');
-                if (appState.savedPlaces.home) {
-                    document.getElementById('destination').value = appState.savedPlaces.home.name;
-                    document.getElementById('destinationModal').classList.remove('hidden');
-                } else {
-                    showAlert('Home address not set. Please set it in settings.', 'info');
-                    openSettings();
-                }
-            });
-            
-            document.getElementById('workButton').addEventListener('click', function(e) {
-                e.stopPropagation();
-                console.log('Work button clicked');
-                if (appState.savedPlaces.work) {
-                    document.getElementById('destination').value = appState.savedPlaces.work.name;
-                    document.getElementById('destinationModal').classList.remove('hidden');
-                } else {
-                    showAlert('Work address not set. Please set it in settings.', 'info');
-                    openSettings();
-                }
-            });
-            
-            document.getElementById('newButton').addEventListener('click', function(e) {
-                e.stopPropagation();
-                console.log('New button clicked');
-                document.getElementById('destination').value = '';
-                document.getElementById('destinationModal').classList.remove('hidden');
-            });
-
-            // Add keyboard support for destination input
-            document.getElementById('destination').addEventListener('keyup', function(event) {
-                if (event.key === 'Enter') {
-                    setAlarm(false);
-                }
-            });
-            
-            // Compass button functionality
-            document.getElementById('compassBtn').addEventListener('click', function(e) {
-                e.stopPropagation();
-                if (userMarker) {
-                    map.setView(userMarker.getLatLng(), 16);
-                }
-            });
+function setupBottomSheet() {
+    const bottomSheet = document.getElementById('bottomSheet');
+    const handle = document.getElementById('bottomSheetHandle');
+    const searchBar = document.getElementById('searchBar');
+    
+    // Define snap points
+    const snapPoints = {
+        minimized: 100,
+        partial: 230,
+        full: window.innerHeight - 100
+    };
+    
+    let startY = 0;
+    let startHeight = 0;
+    let isDragging = false;
+    
+    // Set initial height
+    bottomSheet.style.height = snapPoints.partial + 'px';
+    
+    // Touch events for mobile
+    handle.addEventListener('touchstart', dragStart, { passive: false });
+    document.addEventListener('touchmove', dragMove, { passive: false });
+    document.addEventListener('touchend', dragEnd);
+    
+    // Mouse events for desktop
+    handle.addEventListener('mousedown', dragStart);
+    document.addEventListener('mousemove', dragMove);
+    document.addEventListener('mouseup', dragEnd);
+    
+    function dragStart(e) {
+        console.log('Drag start');
+        isDragging = true;
+        
+        // Get current height
+        startHeight = parseInt(getComputedStyle(bottomSheet).height);
+        
+        // Get start position
+        startY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
+        
+        // Prevent default behavior
+        if (e.cancelable) {
+            e.preventDefault();
         }
+        
+        // Add active class for visual feedback
+        handle.classList.add('active');
+    }
+    
+    function dragMove(e) {
+        if (!isDragging) return;
+        
+        // Get current position
+        const currentY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
+        
+        // Calculate new height
+        const deltaY = startY - currentY;
+        let newHeight = startHeight + deltaY;
+        
+        // Limit height to snap points range
+        newHeight = Math.max(snapPoints.minimized, Math.min(snapPoints.full, newHeight));
+        
+        // Apply new height
+        bottomSheet.style.height = newHeight + 'px';
+        
+        // Prevent default to avoid scrolling
+        if (e.cancelable) {
+            e.preventDefault();
+        }
+        
+        console.log('Dragging: new height =', newHeight);
+    }
+    
+    function dragEnd() {
+        if (!isDragging) return;
+        console.log('Drag end');
+        
+        isDragging = false;
+        handle.classList.remove('active');
+        
+        // Get current height
+        const currentHeight = parseInt(getComputedStyle(bottomSheet).height);
+        
+        // Determine which snap point to go to
+        let targetHeight;
+        
+        if (currentHeight < (snapPoints.minimized + snapPoints.partial) / 2) {
+            targetHeight = snapPoints.minimized;
+        } else if (currentHeight < (snapPoints.partial + snapPoints.full) / 2) {
+            targetHeight = snapPoints.partial;
+        } else {
+            targetHeight = snapPoints.full;
+        }
+        
+        // Animate to snap point
+        bottomSheet.style.transition = 'height 0.3s ease';
+        bottomSheet.style.height = targetHeight + 'px';
+        
+        // Reset transition after animation
+        setTimeout(() => {
+            bottomSheet.style.transition = '';
+        }, 300);
+    }
+    
+    // Open destination modal when search bar is clicked
+    searchBar.addEventListener('click', function(e) {
+        e.stopPropagation();
+        console.log("Search bar clicked!");
+        document.getElementById('destinationModal').classList.remove('hidden');
+    });
+    
+    // Close destination modal - both X button and Cancel button
+    document.getElementById('closeDestinationModal').addEventListener('click', function(e) {
+        e.stopPropagation();
+        document.getElementById('destinationModal').classList.add('hidden');
+    });
+    document.getElementById('cancelDestinationBtn').addEventListener('click', function(e) {
+        e.stopPropagation();
+        document.getElementById('destinationModal').classList.add('hidden');
+    });
+    
+    // Setup quick access buttons with debug logging
+    document.getElementById('homeButton').addEventListener('click', function(e) {
+        e.stopPropagation();
+        console.log('Home button clicked');
+        if (appState.savedPlaces.home) {
+            document.getElementById('destination').value = appState.savedPlaces.home.name;
+            document.getElementById('destinationModal').classList.remove('hidden');
+        } else {
+            showAlert('Home address not set. Please set it in settings.', 'info');
+            openSettings();
+        }
+    });
+    
+    document.getElementById('workButton').addEventListener('click', function(e) {
+        e.stopPropagation();
+        console.log('Work button clicked');
+        if (appState.savedPlaces.work) {
+            document.getElementById('destination').value = appState.savedPlaces.work.name;
+            document.getElementById('destinationModal').classList.remove('hidden');
+        } else {
+            showAlert('Work address not set. Please set it in settings.', 'info');
+            openSettings();
+        }
+    });
+    
+    document.getElementById('newButton').addEventListener('click', function(e) {
+        e.stopPropagation();
+        console.log('New button clicked');
+        document.getElementById('destination').value = '';
+        document.getElementById('destinationModal').classList.remove('hidden');
+    });
+
+    // Add keyboard support for destination input
+    document.getElementById('destination').addEventListener('keyup', function(event) {
+        if (event.key === 'Enter') {
+            setAlarm(false);
+        }
+    });
+    
+    // Compass button functionality
+    document.getElementById('compassBtn').addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (userMarker) {
+            map.setView(userMarker.getLatLng(), 16);
+        }
+    });
+}
         
         // Setup Live Activity controls
         function setupLiveActivityControls() {
@@ -1672,6 +1677,11 @@ getElementById('workAddress').value;
                 if (!workAddress) {
                     showAlert('Please enter a work address', 'error');
                     return;
+                }
+                
+                // Geocode the address
+                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(workAddress)}, Philippines`)
+                    .then(response => response.json())
                 }
                 
                 // Geocode the address
