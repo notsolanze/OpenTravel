@@ -521,6 +521,38 @@
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             cursor: pointer;
         }
+
+        .destination-display {
+            background-color: #374151;
+            border-radius: 12px;
+            padding: 16px;
+            margin: 8px 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: #D1D5DB;
+            position: relative;
+            z-index: 1001;
+        }
+
+        .no-destination, .active-destination {
+            display: flex;
+            align-items: center;
+            flex: 1;
+        }
+
+        .set-destination-btn {
+            width: 36px;
+            height: 36px;
+            background-color: #4B5563;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            margin-left: 12px;
+            flex-shrink: 0;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -568,10 +600,24 @@
             <i data-lucide="maximize-2" class="w-5 h-5 text-white"></i>
         </div>
         
-        <!-- Search Bar -->
-        <div class="search-bar clickable" id="searchBar">
-            <i data-lucide="search" class="w-5 h-5 mr-3 text-gray-400"></i>
-            <span class="text-gray-400">Where to?</span>
+        <!-- Replace the search bar with this destination display -->
+        <div class="destination-display" id="destinationDisplay">
+            <div class="no-destination">
+                <i data-lucide="map-pin" class="w-5 h-5 mr-3 text-gray-400"></i>
+                <span class="text-gray-400">No active journey</span>
+            </div>
+            <div class="active-destination hidden">
+                <div class="flex items-center">
+                    <i data-lucide="navigation" class="w-5 h-5 mr-3 text-green-500"></i>
+                    <div>
+                        <div class="text-white font-medium destination-name">Destination name</div>
+                        <div class="text-gray-400 text-sm destination-eta">Calculating ETA...</div>
+                    </div>
+                </div>
+            </div>
+            <button class="set-destination-btn clickable" id="setDestinationBtn">
+                <i data-lucide="plus" class="w-5 h-5"></i>
+            </button>
         </div>
         
         <!-- Quick Access Buttons -->
@@ -929,7 +975,6 @@
         function setupBottomSheet() {
             const bottomSheet = document.getElementById('bottomSheet');
             const handle = document.getElementById('bottomSheetHandle');
-            const searchBar = document.getElementById('searchBar');
             const overlay = document.getElementById('bottomSheetOverlay');
             let startY, startHeight, currentHeight;
             
@@ -985,13 +1030,13 @@
                 }
             });
             
-            // Open destination modal when search bar is clicked
-            searchBar.addEventListener('click', function(e) {
+            // In the setupBottomSheet function, replace the searchBar click event with this:
+            document.getElementById('setDestinationBtn').addEventListener('click', function(e) {
                 e.stopPropagation(); // Stop event from propagating
-                console.log("Search bar clicked!");
+                console.log("Set destination button clicked!");
                 document.getElementById('destinationModal').classList.remove('hidden');
             });
-            
+
             // Close destination modal - both X button and Cancel button
             document.getElementById('closeDestinationModal').addEventListener('click', function(e) {
                 e.stopPropagation(); // Stop event from propagating
@@ -1046,9 +1091,6 @@
                 minimizeBottomSheet();
             });
             
-            // Add autocomplete functionality to destination input
-            setupDestinationAutocomplete();
-
             const expandButton = document.getElementById('expandButton');
             expandButton.addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -1111,75 +1153,31 @@
             overlay.classList.add('active');
         }
 
-        // Setup autocomplete for destination input
-        function setupDestinationAutocomplete() {
-            const destinationInput = document.getElementById('destination');
+        // Replace the setupDestinationAutocomplete function with this:
+        function updateDestinationDisplay() {
+            const noDestination = document.querySelector('.no-destination');
+            const activeDestination = document.querySelector('.active-destination');
+            const destinationName = document.querySelector('.destination-name');
+            const destinationEta = document.querySelector('.destination-eta');
             
-            // Add input event listener for autocomplete
-            destinationInput.addEventListener('input', function() {
-                const query = this.value.trim();
+            if (appState.isJourneyActive && appState.currentDestination) {
+                noDestination.classList.add('hidden');
+                activeDestination.classList.remove('hidden');
+                destinationName.textContent = appState.currentDestination;
                 
-                // Only search if we have at least 3 characters
-                if (query.length >= 3) {
-                    // Debounce the search to avoid too many requests
-                    clearTimeout(this.searchTimeout);
-                    this.searchTimeout = setTimeout(() => {
-                        searchPlaces(query);
-                    }, 500);
+                // Calculate ETA if we have initial distance
+                if (initialDistance) {
+                    const speed = 5; // meters per second (walking speed)
+                    const remainingTimeSeconds = initialDistance / speed;
+                    const remainingMinutes = Math.ceil(remainingTimeSeconds / 60);
+                    destinationEta.textContent = `ETA: ${remainingMinutes} min`;
+                } else {
+                    destinationEta.textContent = 'Calculating ETA...';
                 }
-            });
-            
-            // Create a container for autocomplete results
-            const autocompleteContainer = document.createElement('div');
-            autocompleteContainer.id = 'autocompleteResults';
-            autocompleteContainer.className = 'absolute z-50 w-full bg-gray-700 rounded-lg mt-1 shadow-lg max-h-60 overflow-y-auto hidden';
-            destinationInput.parentNode.style.position = 'relative';
-            destinationInput.parentNode.appendChild(autocompleteContainer);
-            
-            // Search for places using Nominatim
-            function searchPlaces(query) {
-                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}, Philippines&limit=5`)
-                    .then(response => response.json())
-                    .then(data => {
-                        showAutocompleteResults(data);
-                    })
-                    .catch(error => {
-                        console.error('Error searching places:', error);
-                    });
+            } else {
+                noDestination.classList.remove('hidden');
+                activeDestination.classList.add('hidden');
             }
-            
-            // Show autocomplete results
-            function showAutocompleteResults(results) {
-                const container = document.getElementById('autocompleteResults');
-                
-                if (results.length === 0) {
-                    container.classList.add('hidden');
-                    return;
-                }
-                
-                container.innerHTML = '';
-                results.forEach(place => {
-                    const item = document.createElement('div');
-                    item.className = 'p-3 hover:bg-gray-600 cursor-pointer border-b border-gray-600 last:border-0';
-                    item.textContent = place.display_name;
-                    
-                    item.addEventListener('click', function() {
-                        destinationInput.value = place.display_name;
-                        container.classList.add('hidden');
-                    });
-                    
-                    container.appendChild(item);
-                });
-                
-                container.classList.remove('hidden');
-            }
-            
-            // Hide autocomplete results when clicking outside
-            document.addEventListener('click', function(e) {
-                if (e.target !== destinationInput) {
-                    document.getElementById('autocompleteResults').classList.add('hidden');
-                }
-            });
         }
         
         // Setup Live Activity controls
@@ -1390,6 +1388,9 @@
             // Clear journey state
             appState.isJourneyActive = false;
             localStorage.setItem('journeyState', JSON.stringify(appState));
+            
+            // Update the destination display
+            updateDestinationDisplay();
             
             // Close destination modal
             document.getElementById('destinationModal').classList.add('hidden');
@@ -1657,6 +1658,9 @@
                     appState.destinationCoords = destCoords;
                     appState.journeyStartTime = Date.now();
                     localStorage.setItem('journeyState', JSON.stringify(appState));
+
+                    // Update the destination display
+                    updateDestinationDisplay();
                     
                     // Show live activity
                     showLiveActivity();
@@ -1739,6 +1743,9 @@
         // Initialize the app
         function initApp() {
             initMap();
+
+            // Update destination display
+            updateDestinationDisplay();
             
             // Set alarm button
             document.getElementById('setAlarm').addEventListener('click', (e) => {
