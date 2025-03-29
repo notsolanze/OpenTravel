@@ -8,7 +8,8 @@ const urlsToCache = [
   'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap',
   'https://unpkg.com/lucide@latest',
   'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-  'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3'
+  'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3',
+  '/splash-screen.png'
 ];
 
 self.addEventListener('install', (event) => {
@@ -16,6 +17,8 @@ self.addEventListener('install', (event) => {
     caches.open(CACHE_NAME)
       .then((cache) => cache.addAll(urlsToCache))
   );
+  // Force the waiting service worker to become the active service worker
+  self.skipWaiting();
 });
 
 self.addEventListener('fetch', (event) => {
@@ -37,12 +40,16 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
+  // Claim any clients immediately
+  event.waitUntil(clients.claim());
 });
 
 // Active journey tracking
 let journeyData = null;
-let activeNotificationTag = 'opentravel-journey';
+let notificationTag = 'opentravel-journey';
 let initialDistance = 0;
+let lastNotificationTime = 0;
+const MIN_UPDATE_INTERVAL = 5000; // Minimum 5 seconds between notification updates
 
 // Listen for messages from the main app
 self.addEventListener('message', (event) => {
@@ -50,19 +57,25 @@ self.addEventListener('message', (event) => {
     // Store journey data
     journeyData = event.data.journeyData;
     initialDistance = journeyData.initialDistance;
+    lastNotificationTime = Date.now();
     
     // Start the journey with initial notification
     startJourney();
   } else if (event.data && event.data.type === 'UPDATE_LOCATION') {
     // Update the notification with new location data
     if (journeyData) {
-      updateJourneyProgress(event.data.location, event.data.distance);
+      const currentTime = Date.now();
+      // Only update notification if enough time has passed since last update
+      if (currentTime - lastNotificationTime > MIN_UPDATE_INTERVAL) {
+        updateJourneyProgress(event.data.location, event.data.distance);
+        lastNotificationTime = currentTime;
+      }
     }
   } else if (event.data && event.data.type === 'STOP_JOURNEY') {
     // Clear journey data
     journeyData = null;
     // Close any active notifications
-    self.registration.getNotifications({ tag: activeNotificationTag })
+    self.registration.getNotifications({ tag: notificationTag })
       .then(notifications => {
         notifications.forEach(notification => notification.close());
       });
@@ -83,20 +96,14 @@ function startJourney() {
     hour12: true
   });
   
-  // Show the initial notification
-  self.registration.showNotification('OpenTravel', {
+  // Create the notification options
+  const options = {
     body: `${formattedTime} to ${destinationName}`,
     icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
     badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    tag: activeNotificationTag,
+    tag: notificationTag,
     renotify: false,
     requireInteraction: true,
-    silent: true,
-    data: {
-      progress: 0,
-      destinationName,
-      timestamp: Date.now()
-    },
     actions: [
       {
         action: 'view',
@@ -106,8 +113,18 @@ function startJourney() {
         action: 'cancel',
         title: 'Cancel'
       }
-    ]
-  });
+    ],
+    // This is where we store data for our notification
+    data: {
+      progress: 0,
+      destinationName,
+      timestamp: Date.now(),
+      initialDistance: initialDistance
+    }
+  };
+  
+  // Show the notification
+  self.registration.showNotification('OpenTravel', options);
 }
 
 // Update journey progress
@@ -132,48 +149,45 @@ function updateJourneyProgress(location, currentDistance) {
     message = `${remainingMinutes} min to ${journeyData.destinationName}`;
   }
   
-  // Only update notification if we have an active one
-  self.registration.getNotifications({ tag: activeNotificationTag })
+  // Get all existing notifications
+  self.registration.getNotifications({ tag: notificationTag })
     .then(notifications => {
-      if (notifications.length > 0) {
-        // Close the existing notification
-        notifications.forEach(notification => notification.close());
-        
-        // Show updated notification with progress
-        self.registration.showNotification('OpenTravel', {
-          body: message,
-          icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-          badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-          tag: activeNotificationTag,
-          renotify: false,
-          requireInteraction: true,
-          silent: true,
-          data: {
-            progress: progress,
-            destinationName: journeyData.destinationName,
-            timestamp: Date.now()
+      // Close existing notifications
+      notifications.forEach(notification => notification.close());
+      
+      // Create new notification options
+      const options = {
+        body: message,
+        icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        tag: notificationTag,
+        renotify: true,
+        requireInteraction: true,
+        actions: [
+          {
+            action: 'view',
+            title: 'View'
           },
-          actions: [
-            {
-              action: 'view',
-              title: 'View'
-            },
-            {
-              action: 'cancel',
-              title: 'Cancel'
-            }
-          ]
-        });
-      }
-    });
-  
-  // If we've reached the destination (within 10 meters), send arrival notification
-  if (currentDistance <= 10) {
-    self.registration.getNotifications({ tag: activeNotificationTag })
-      .then(notifications => {
-        notifications.forEach(notification => notification.close());
-        
-        // Show arrival notification
+          {
+            action: 'cancel',
+            title: 'Cancel'
+          }
+        ],
+        data: {
+          progress: progress,
+          destinationName: journeyData.destinationName,
+          timestamp: Date.now(),
+          initialDistance: initialDistance,
+          currentDistance: currentDistance
+        }
+      };
+      
+      // Show the updated notification
+      self.registration.showNotification('OpenTravel', options);
+      
+      // If we've reached the destination (within 10 meters), send arrival notification
+      if (currentDistance <= 10) {
+        // Show arrival notification with different tag to ensure it appears as a new notification
         self.registration.showNotification('Destination Reached!', {
           body: `You have arrived at ${journeyData.destinationName}`,
           icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
@@ -189,8 +203,8 @@ function updateJourneyProgress(location, currentDistance) {
         
         // Clear journey data
         journeyData = null;
-      });
-  }
+      }
+    });
 }
 
 // Handle notification clicks
@@ -227,3 +241,72 @@ self.addEventListener('notificationclick', (event) => {
     );
   }
 });
+
+// Handle push events (for web push notifications)
+self.addEventListener('push', (event) => {
+  if (event.data) {
+    try {
+      const data = event.data.json();
+      const options = {
+        body: data.body || 'Update from OpenTravel',
+        icon: data.icon || 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        data: data.data || {},
+        actions: data.actions || []
+      };
+      
+      event.waitUntil(
+        self.registration.showNotification(data.title || 'OpenTravel', options)
+      );
+    } catch (error) {
+      console.error('Error processing push notification:', error);
+    }
+  }
+});
+
+// Handle periodic sync for background updates
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'opentravel-update' && journeyData) {
+    event.waitUntil(
+      // Get the latest location and update the notification
+      new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const { latitude, longitude } = position.coords;
+            const distance = calculateDistance(
+              { latitude, longitude },
+              { latitude: journeyData.destination[0], longitude: journeyData.destination[1] }
+            );
+            updateJourneyProgress({ latitude, longitude }, distance);
+            resolve();
+          },
+          (error) => {
+            console.error('Error getting location in periodic sync:', error);
+            resolve();
+          },
+          {
+            enableHighAccuracy: true,
+            maximumAge: 0,
+            timeout: 5000
+          }
+        );
+      })
+    );
+  }
+});
+
+// Calculate distance between two points
+function calculateDistance(point1, point2) {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = point1.latitude * Math.PI/180;
+  const φ2 = point2.latitude * Math.PI/180;
+  const Δφ = (point2.latitude - point1.latitude) * Math.PI/180;
+  const Δλ = (point2.longitude - point1.longitude) * Math.PI/180;
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+  return R * c; // Distance in meters
+}
