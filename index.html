@@ -65,9 +65,9 @@
             background-color: #1F2937;
             border-top-left-radius: 20px;
             border-top-right-radius: 20px;
-            z-index: 1000;
+            z-index: 900; /* Reduced z-index to be below compass button */
             box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
-            transition: transform 0.3s ease;
+            transition: transform 0.3s ease, height 0.3s ease;
             touch-action: pan-x; /* Only allow horizontal panning */
             overflow-y: auto; /* Allow scrolling of content */
             max-height: 90vh; /* Prevent sheet from covering entire screen */
@@ -322,7 +322,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 900;
+            z-index: 950; /* Increased z-index to be above bottom sheet */
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             cursor: pointer;
         }
@@ -449,6 +449,41 @@
         .go-button:hover {
             background-color: #059669;
         }
+
+        /* Add overlay for clicking outside the sheet */
+        .bottom-sheet-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 899; /* Just below the sheet */
+            display: none; /* Hidden by default */
+        }
+        .bottom-sheet-overlay.active {
+            display: block;
+        }
+
+        /* Autocomplete styles */
+        #autocompleteResults {
+            position: absolute;
+            z-index: 1000;
+            background-color: #374151;
+            border-radius: 8px;
+            padding: 8px;
+            margin-top: 4px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        #autocompleteResults div {
+            padding: 8px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        #autocompleteResults div:hover {
+            background-color: #4B5563;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -483,6 +518,9 @@
     <!-- Distance Badge -->
     <div id="distance" class="distance-badge text-sm font-semibold text-white"></div>
     
+    <!-- Bottom Sheet Overlay -->
+    <div class="bottom-sheet-overlay" id="bottomSheetOverlay"></div>
+
     <!-- Bottom Sheet -->
     <div class="bottom-sheet" id="bottomSheet">
         <div class="bottom-sheet-handle clickable" id="bottomSheetHandle"></div>
@@ -527,9 +565,10 @@
                     <i data-lucide="x" class="w-6 h-6"></i>
                 </button>
             </div>
-            <div class="mb-4">
+            <div class="mb-4 relative">
                 <label for="destination" class="block text-sm font-medium text-gray-300 mb-1">Where are you going?</label>
                 <input type="text" id="destination" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 text-white" placeholder="Enter destination">
+                <!-- Autocomplete results will be inserted here -->
             </div>
             <div class="mb-4">
                 <label for="radius" class="block text-sm font-medium text-gray-300 mb-1">Alarm Radius (meters)</label>
@@ -848,6 +887,7 @@
             const bottomSheet = document.getElementById('bottomSheet');
             const handle = document.getElementById('bottomSheetHandle');
             const searchBar = document.getElementById('searchBar');
+            const overlay = document.getElementById('bottomSheetOverlay');
             let startY, startHeight, currentHeight;
             
             // Set initial height
@@ -880,14 +920,25 @@
                 
                 // Snap to positions
                 if (currentHeight < 150) {
-                    bottomSheet.style.height = '100px';
-                    bottomSheetHeight = 'minimized';
+                    minimizeBottomSheet();
                 } else if (currentHeight < window.innerHeight / 2) {
-                    bottomSheet.style.height = '230px';
-                    bottomSheetHeight = 'partial';
+                    expandBottomSheetPartial();
                 } else {
-                    bottomSheet.style.height = (window.innerHeight - 100) + 'px';
-                    bottomSheetHeight = 'full';
+                    expandBottomSheetFull();
+                }
+            });
+            
+            // Click outside to minimize
+            overlay.addEventListener('click', function() {
+                minimizeBottomSheet();
+            });
+            
+            // Double tap handle to maximize
+            handle.addEventListener('dblclick', function() {
+                if (bottomSheetHeight === 'full') {
+                    expandBottomSheetPartial();
+                } else {
+                    expandBottomSheetFull();
                 }
             });
             
@@ -944,6 +995,115 @@
             document.getElementById('destination').addEventListener('keyup', function(event) {
                 if (event.key === 'Enter') {
                     setAlarm(false);
+                }
+            });
+            
+            // Add click event to map to minimize sheet
+            document.getElementById('map').addEventListener('click', function() {
+                minimizeBottomSheet();
+            });
+            
+            // Add autocomplete functionality to destination input
+            setupDestinationAutocomplete();
+        }
+
+        // Function to minimize bottom sheet
+        function minimizeBottomSheet() {
+            const bottomSheet = document.getElementById('bottomSheet');
+            const overlay = document.getElementById('bottomSheetOverlay');
+            
+            bottomSheet.style.height = '100px';
+            bottomSheetHeight = 'minimized';
+            overlay.classList.remove('active');
+        }
+
+        // Function to expand bottom sheet to partial height
+        function expandBottomSheetPartial() {
+            const bottomSheet = document.getElementById('bottomSheet');
+            const overlay = document.getElementById('bottomSheetOverlay');
+            
+            bottomSheet.style.height = '230px';
+            bottomSheetHeight = 'partial';
+            overlay.classList.add('active');
+        }
+
+        // Function to expand bottom sheet to full height
+        function expandBottomSheetFull() {
+            const bottomSheet = document.getElementById('bottomSheet');
+            const overlay = document.getElementById('bottomSheetOverlay');
+            
+            bottomSheet.style.height = (window.innerHeight - 100) + 'px';
+            bottomSheetHeight = 'full';
+            overlay.classList.add('active');
+        }
+
+        // Setup autocomplete for destination input
+        function setupDestinationAutocomplete() {
+            const destinationInput = document.getElementById('destination');
+            
+            // Add input event listener for autocomplete
+            destinationInput.addEventListener('input', function() {
+                const query = this.value.trim();
+                
+                // Only search if we have at least 3 characters
+                if (query.length >= 3) {
+                    // Debounce the search to avoid too many requests
+                    clearTimeout(this.searchTimeout);
+                    this.searchTimeout = setTimeout(() => {
+                        searchPlaces(query);
+                    }, 500);
+                }
+            });
+            
+            // Create a container for autocomplete results
+            const autocompleteContainer = document.createElement('div');
+            autocompleteContainer.id = 'autocompleteResults';
+            autocompleteContainer.className = 'absolute z-50 w-full bg-gray-700 rounded-lg mt-1 shadow-lg max-h-60 overflow-y-auto hidden';
+            destinationInput.parentNode.style.position = 'relative';
+            destinationInput.parentNode.appendChild(autocompleteContainer);
+            
+            // Search for places using Nominatim
+            function searchPlaces(query) {
+                fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}, Philippines&limit=5`)
+                    .then(response => response.json())
+                    .then(data => {
+                        showAutocompleteResults(data);
+                    })
+                    .catch(error => {
+                        console.error('Error searching places:', error);
+                    });
+            }
+            
+            // Show autocomplete results
+            function showAutocompleteResults(results) {
+                const container = document.getElementById('autocompleteResults');
+                
+                if (results.length === 0) {
+                    container.classList.add('hidden');
+                    return;
+                }
+                
+                container.innerHTML = '';
+                results.forEach(place => {
+                    const item = document.createElement('div');
+                    item.className = 'p-3 hover:bg-gray-600 cursor-pointer border-b border-gray-600 last:border-0';
+                    item.textContent = place.display_name;
+                    
+                    item.addEventListener('click', function() {
+                        destinationInput.value = place.display_name;
+                        container.classList.add('hidden');
+                    });
+                    
+                    container.appendChild(item);
+                });
+                
+                container.classList.remove('hidden');
+            }
+            
+            // Hide autocomplete results when clicking outside
+            document.addEventListener('click', function(e) {
+                if (e.target !== destinationInput) {
+                    document.getElementById('autocompleteResults').classList.add('hidden');
                 }
             });
         }
@@ -1736,7 +1896,12 @@
                     }
                 }
             });
-        }
+            
+            // Show bottom sheet in partial state initially
+            setTimeout(() => {
+                expandBottomSheetPartial();
+            }, 2500); // Wait for splash screen to disappear
+}
 
         function updateAlarmSound() {
             const audio = document.getElementById('alarmAudio');
