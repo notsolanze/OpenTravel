@@ -544,6 +544,7 @@
                     console.log('Service worker not ready for location update');
                 }
                 
+                // Check if we've reached the destination
                 if (distance <= alarmRadius && !isAlarmPlaying) {
                     playAlarm();
                     document.getElementById('status').textContent = 'You have reached your destination!';
@@ -913,9 +914,25 @@
             
             // Listen for messages from the service worker
             navigator.serviceWorker.addEventListener('message', (event) => {
+                console.log('[Main] Message received from service worker:', event.data);
+                
                 if (event.data && event.data.type === 'JOURNEY_CANCELED') {
                     stopAlarm();
                     showAlert('Journey canceled', 'info');
+                } else if (event.data && event.data.type === 'PLAY_ALARM') {
+                    // Play alarm when service worker tells us to
+                    playAlarm();
+                    showAlert('You have reached your destination!', 'success');
+                } else if (event.data && event.data.type === 'ARRIVED_AT_DESTINATION') {
+                    // Handle arrival notification click
+                    document.getElementById('status').textContent = 'You have reached your destination!';
+                    document.getElementById('status').classList.add('text-green-600', 'font-semibold');
+                    
+                    // Clear journey state if not already done
+                    if (appState.isJourneyActive) {
+                        appState.isJourneyActive = false;
+                        localStorage.removeItem('journeyState');
+                    }
                 }
             });
         }
