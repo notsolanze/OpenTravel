@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpenTravel</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
@@ -21,14 +21,10 @@
             background-color: #111827;
             color: #F9FAFB;
             touch-action: manipulation;
-            overflow: hidden;
-            position: fixed;
-            width: 100%;
-            height: 100%;
         }
         .distance-badge {
             position: fixed;
-            top: 20px;
+            top: 75px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 1000;
@@ -43,6 +39,23 @@
             z-index: 1000;
         }
         
+        /* Status bar */
+        .status-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background-color: rgba(17, 24, 39, 0.8);
+            backdrop-filter: blur(8px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px;
+            z-index: 1000;
+            color: white;
+        }
+        
         /* Bottom sheet */
         .bottom-sheet {
             position: fixed;
@@ -52,7 +65,7 @@
             background-color: #1F2937;
             border-top-left-radius: 20px;
             border-top-right-radius: 20px;
-            z-index: 900; /* Keep this lower than the live activity and settings button */
+            z-index: 900; /* Reduced z-index to be below compass button */
             box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
             transition: transform 0.3s ease, height 0.3s ease;
             touch-action: pan-x; /* Only allow horizontal panning */
@@ -139,41 +152,19 @@
         .recent-location-item {
             display: flex;
             align-items: center;
-            padding: 0;
+            padding: 12px 0;
             border-bottom: 1px solid #374151;
             cursor: pointer;
-            position: relative;
-            overflow: hidden;
-            transition: transform 0.3s ease;
-            touch-action: pan-y;
         }
-
-        .recent-location-content {
-            display: flex;
-            align-items: center;
-            width: 100%;
-            padding: 12px 0;
-            transform: translateX(0);
-            transition: transform 0.3s ease;
-            background-color: #1F2937;
-            z-index: 1;
-        }
-
-        .delete-button {
-            position: absolute;
-            right: 0;
-            width: 70px;
-            height: 100%;
-            background-color: #EF4444;
-            color: white;
+        .recent-location-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #374151;
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 0;
-        }
-
-        .recent-location-item.swiped .recent-location-content {
-            transform: translateX(-70px);
+            margin-right: 12px;
         }
         
         /* Live Activity styles */
@@ -191,7 +182,7 @@
             border-radius: 16px;
             padding: 12px 16px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            z-index: 9500; /* Extremely high z-index to be above everything */
+            z-index: 1100;
             display: flex;
             flex-direction: column;
             transition: all 0.3s ease;
@@ -315,7 +306,7 @@
             right: 0;
             bottom: 0;
             background-color: #111827;
-            z-index: 2000; /* Keep this below the live activity z-index */
+            z-index: 2000;
             padding: 16px;
             transform: translateX(100%);
             transition: transform 0.3s ease;
@@ -353,23 +344,6 @@
             align-items: center;
             justify-content: center;
             z-index: 950; /* Increased z-index to be above bottom sheet */
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            cursor: pointer;
-        }
-
-        .settings-button {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 50px;
-            height: 50px;
-            background-color: rgba(31, 41, 55, 0.8);
-            backdrop-filter: blur(4px);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 9000; /* Extremely high z-index to be above everything */
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             cursor: pointer;
         }
@@ -579,7 +553,6 @@
             margin-left: 12px;
             flex-shrink: 0;
         }
-        
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -593,17 +566,22 @@
         </div>
     </div>
 
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <div class="time font-semibold">04:00</div>
+        <div class="status-icons flex items-center gap-2 clickable">
+            <i data-lucide="navigation" class="w-4 h-4"></i>
+            <i data-lucide="wifi" class="w-4 h-4"></i>
+            <i data-lucide="battery" class="w-4 h-4"></i>
+        </div>
+    </div>
+
     <!-- Main Map Container -->
     <div id="map" class="h-screen w-full"></div>
     
     <!-- Compass Button -->
     <div class="compass-button clickable" id="compassButton">
         <i data-lucide="compass" class="w-6 h-6 text-white"></i>
-    </div>
-
-    <!-- Settings Button -->
-    <div class="settings-button clickable" id="settingsButton">
-        <i data-lucide="settings" class="w-6 h-6 text-white"></i>
     </div>
     
     <!-- Distance Badge -->
@@ -773,6 +751,7 @@
                     <input type="checkbox" id="enableNotifications" class="form-checkbox h-5 w-5 text-green-600 bg-gray-700 border-gray-600" checked>
                     <span class="ml-2 text-gray-300">Enable Notifications</span>
                 </label>
+            </div>
             
             <div class="settings-item">
                 <label for="updateInterval" class="block text-sm font-medium text-gray-300 mb-1">Update Interval (seconds)</label>
@@ -1252,123 +1231,43 @@
         
         // Populate recent locations
         function populateRecentLocations() {
-    const recentLocationsContainer = document.getElementById('recentLocations');
-    recentLocationsContainer.innerHTML = '';
-    
-    if (recentLocations.length === 0) {
-        recentLocationsContainer.innerHTML = '<p class="text-gray-500 text-center py-4">No recent locations</p>';
-        return;
-    }
-    
-    // Show only the last 5 locations
-    const locationsToShow = recentLocations.slice(0, 5);
-    
-    locationsToShow.forEach((location, index) => {
-        const locationItem = document.createElement('div');
-        locationItem.className = 'recent-location-item';
-        locationItem.dataset = index;
-        
-        // Create content container
-        const contentContainer = document.createElement('div');
-        contentContainer.className = 'recent-location-content';
-        
-        contentContainer.innerHTML = `
-            <div class="recent-location-icon">
-                <i data-lucide="history" class="w-5 h-5"></i>
-            </div>
-            <div class="flex-1">
-                <div class="font-medium">${location.name}</div>
-                <div class="text-sm text-gray-400">${location.address || ''}</div>
-            </div>
-        `;
-        
-        // Create delete button
-        const deleteButton = document.createElement('div');
-        deleteButton.className = 'delete-button';
-        deleteButton.innerHTML = '<i data-lucide="trash-2" class="w-5 h-5"></i>';
-        
-        // Add elements to the item
-        locationItem.appendChild(contentContainer);
-        locationItem.appendChild(deleteButton);
-        
-        // Add touch event listeners for swipe
-        setupSwipeToDelete(locationItem);
-        
-        // Add click event for the content
-        contentContainer.addEventListener('click', (e) => {
-            e.stopPropagation();
-            console.log('Recent location clicked:', location.name);
-            document.getElementById('destination').value = location.name;
-            document.getElementById('destinationModal').classList.remove('hidden');
-        });
-        
-        // Add click event for delete button
-        deleteButton.addEventListener('click', (e) => {
-            e.stopPropagation();
-            deleteRecentLocation(index);
-        });
-        
-        recentLocationsContainer.appendChild(locationItem);
-    });
-    
-    // Initialize icons
-    lucide.createIcons();
-}
-
-function setupSwipeToDelete(element) {
-    let startX = 0;
-    let currentX = 0;
-    let isSwiping = false;
-    
-    element.addEventListener('touchstart', (e) => {
-        startX = e.touches[0].clientX;
-        isSwiping = true;
-        // Reset any previous transform
-        element.classList.remove('swiped');
-    });
-    
-    element.addEventListener('touchmove', (e) => {
-        if (!isSwiping) return;
-        
-        currentX = e.touches[0].clientX;
-        const diffX = currentX - startX;
-        
-        // Only allow left swipe (negative diffX)
-        if (diffX < 0 && diffX > -70) {
-            element.querySelector('.recent-location-content').style.transform = `translateX(${diffX}px)`;
+            const recentLocationsContainer = document.getElementById('recentLocations');
+            recentLocationsContainer.innerHTML = '';
+            
+            if (recentLocations.length === 0) {
+                recentLocationsContainer.innerHTML = '<p class="text-gray-500 text-center py-4">No recent locations</p>';
+                return;
+            }
+            
+            // Show only the last 5 locations
+            const locationsToShow = recentLocations.slice(0, 5);
+            
+            locationsToShow.forEach(location => {
+                const locationItem = document.createElement('div');
+                locationItem.className = 'recent-location-item clickable';
+                locationItem.innerHTML = `
+                    <div class="recent-location-icon">
+                        <i data-lucide="history" class="w-5 h-5"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="font-medium">${location.name}</div>
+                        <div class="text-sm text-gray-400">${location.address || ''}</div>
+                    </div>
+                `;
+                
+                locationItem.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    console.log('Recent location clicked:', location.name);
+                    document.getElementById('destination').value = location.name;
+                    document.getElementById('destinationModal').classList.remove('hidden');
+                });
+                
+                recentLocationsContainer.appendChild(locationItem);
+            });
+            
+            // Initialize icons
+            lucide.createIcons();
         }
-    });
-    
-    element.addEventListener('touchend', (e) => {
-        if (!isSwiping) return;
-        
-        const diffX = currentX - startX;
-        
-        // If swiped more than 40px to the left, keep it open
-        if (diffX < -40) {
-            element.classList.add('swiped');
-        } else {
-            element.classList.remove('swiped');
-            element.querySelector('.recent-location-content').style.transform = '';
-        }
-        
-        isSwiping = false;
-    });
-}
-
-function deleteRecentLocation(index) {
-    // Remove the item from the array
-    recentLocations.splice(index, 1);
-    
-    // Save to localStorage
-    localStorage.setItem('recentLocations', JSON.stringify(recentLocations));
-    
-    // Update UI
-    populateRecentLocations();
-    
-    // Show confirmation
-    showAlert('Location removed from history', 'success');
-}
         
         // Add location to recent
         function addToRecentLocations(location) {
@@ -1400,10 +1299,8 @@ function deleteRecentLocation(index) {
             map = L.map('map', {
                 zoomControl: false,
                 attributionControl: false,
-                dragging: true,
+                dragging: true, // Ensure dragging is enabled
                 touchZoom: true,
-                tap: true,
-                bounceAtZoomLimits: false,
                 scrollWheelZoom: true
             }).setView([14.5995, 120.9842], 15); // Manila coordinates
             
@@ -1440,12 +1337,6 @@ function deleteRecentLocation(index) {
                 if (userMarker) {
                     map.setView(userMarker.getLatLng(), 16);
                 }
-            });
-
-            // Settings button
-            document.getElementById('settingsButton').addEventListener('click', (e) => {
-                e.stopPropagation(); // Stop event from propagating
-                openSettings();
             });
         }
 
@@ -1576,20 +1467,12 @@ function deleteRecentLocation(index) {
             const liveActivity = document.getElementById('liveActivity');
             liveActivity.classList.remove('hidden');
             
-            // Force display and ensure it's visible
-            liveActivity.style.display = 'flex';
-            liveActivity.style.visibility = 'visible';
-            liveActivity.style.opacity = '1';
-            liveActivity.style.zIndex = '9500'; // Force high z-index
-            
             // If it was previously minimized, keep it minimized
             if (isLiveActivityMinimized) {
                 liveActivity.classList.add('minimized');
             } else {
                 liveActivity.classList.remove('minimized');
             }
-            
-            console.log('Live activity shown on map page with high z-index');
         }
 
         // Hide live activity
@@ -1600,15 +1483,7 @@ function deleteRecentLocation(index) {
 
         // Update live activity
         function updateLiveActivity(currentDistance) {
-            if (!initialDistance) {
-                console.log('No initial distance set, cannot update live activity');
-                return;
-            }
-            
-            console.log('Updating live activity, distance:', currentDistance);
-            
-            // Force show the live activity first
-            showLiveActivity();
+            if (!initialDistance) return;
             
             const progress = calculateProgress(currentDistance);
             const progressBar = document.getElementById('liveActivityProgress');
@@ -1637,6 +1512,9 @@ function deleteRecentLocation(index) {
             
             // Update subtitle with destination name
             subtitle.textContent = appState.currentDestination || 'Destination';
+            
+            // Show the live activity if it's hidden
+            showLiveActivity();
         }
 
         // Set alarm
@@ -1882,6 +1760,12 @@ function deleteRecentLocation(index) {
                 stopAlarm();
             });
             
+            // Settings button - only attach to the status icons, not the entire bar
+            document.querySelector('.status-icons').addEventListener('click', function(e) {
+                e.stopPropagation(); // Stop event from propagating
+                openSettings();
+            });
+            
             // Back from settings
             document.getElementById('backFromSettings').addEventListener('click', closeSettings);
             
@@ -2101,39 +1985,6 @@ function deleteRecentLocation(index) {
 }
 
         function updateAlarmSound() {
-            const audio = document.getElementById('alarmAudio');
-            switch (settings.alarmSound) {
-                case 'chimes':
-                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3';
-                    break;
-                case 'radar':
-                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2569/2569-preview.mp3';
-                    break;
-                case 'beacon':
-                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2570/2570-preview.mp3';
-                    break;
-                case 'signal':
-                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2908/2908-preview.mp3';
-                    break;
-                case 'bells':
-                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2910/2910-preview.mp3';
-                    break;
-                case 'digital':
-                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2573/2573-preview.mp3';
-                    break;
-                case 'alarm':
-                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2574/2574-preview.mp3';
-                    break;
-                case 'siren':
-                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2575/2575-preview.mp3';
-                    break;
-                default:
-                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3';
-            }
-            audio.volume = settings.volume;
-        }
-
-        function showAlert(message, type = 'error') {
             const audio = document.getElementById('alarmAudio');
             switch (settings.alarmSound) {
                 case 'chimes':
