@@ -34,84 +34,87 @@
             z-index: 1000;
         }
         
-        /* Progress notification styles */
-        .progress-notification {
+        /* Live Activity styles */
+        .live-activity {
             position: fixed;
-            top: 16px;
+            bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
             width: 90%;
-            max-width: 400px;
-            background-color: #10B981;
+            max-width: 350px;
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
             color: white;
-            border-radius: 12px;
+            border-radius: 16px;
             padding: 12px 16px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
             z-index: 1100;
             display: flex;
             flex-direction: column;
             transition: all 0.3s ease;
         }
-        .progress-notification.hidden {
-            transform: translate(-50%, -150%);
+        .live-activity.hidden {
+            transform: translate(-50%, 150%);
             opacity: 0;
         }
-        .progress-notification-header {
+        .live-activity-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 8px;
         }
-        .progress-notification-title {
+        .live-activity-app {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .live-activity-app-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            background-color: #10B981;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .live-activity-app-name {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        .live-activity-title {
             font-weight: 600;
             font-size: 1.1rem;
+            margin-bottom: 4px;
         }
-        .progress-notification-subtitle {
+        .live-activity-subtitle {
             font-size: 0.9rem;
             opacity: 0.9;
             margin-bottom: 10px;
         }
-        .progress-bar-container {
-            height: 6px;
+        .live-activity-progress-container {
+            height: 4px;
             background-color: rgba(255, 255, 255, 0.3);
-            border-radius: 3px;
+            border-radius: 2px;
             overflow: hidden;
             position: relative;
+            margin-bottom: 8px;
         }
-        .progress-bar {
+        .live-activity-progress {
             height: 100%;
-            background-color: white;
-            border-radius: 3px;
+            background-color: #10B981;
+            border-radius: 2px;
             transition: width 0.5s ease;
         }
-        .progress-icon {
+        .live-activity-dot {
             position: absolute;
             top: 50%;
             transform: translateY(-50%);
-            width: 20px;
-            height: 20px;
+            width: 8px;
+            height: 8px;
             background-color: white;
             border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             transition: left 0.5s ease;
-        }
-        .progress-icon svg {
-            width: 12px;
-            height: 12px;
-            color: #10B981;
-        }
-        .progress-notification-close {
-            background: none;
-            border: none;
-            color: white;
-            cursor: pointer;
-            opacity: 0.8;
-            transition: opacity 0.2s;
-        }
-        .progress-notification-close:hover {
-            opacity: 1;
         }
         
         /* Splash screen styles */
@@ -284,20 +287,21 @@
         </div>
     </div>
     
-    <!-- In-app progress notification (similar to Grab notification) -->
-    <div id="progressNotification" class="progress-notification hidden">
-        <div class="progress-notification-header">
-            <div class="progress-notification-title">OpenTravel</div>
-            <button class="progress-notification-close" id="closeProgressNotification">
-                <i data-lucide="x" class="w-4 h-4"></i>
-            </button>
-        </div>
-        <div class="progress-notification-subtitle" id="progressNotificationText">0 min to destination</div>
-        <div class="progress-bar-container">
-            <div class="progress-bar" id="progressBar" style="width: 0%"></div>
-            <div class="progress-icon" id="progressIcon" style="left: 0%">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 9h2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9h2"></path><path d="M12 14V3"></path><path d="m9 6 3-3 3 3"></path></svg>
+    <!-- Live Activity (iOS style) -->
+    <div id="liveActivity" class="live-activity hidden">
+        <div class="live-activity-header">
+            <div class="live-activity-app">
+                <div class="live-activity-app-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                </div>
+                <div class="live-activity-app-name">OpenTravel</div>
             </div>
+        </div>
+        <div class="live-activity-title" id="liveActivityTitle">0 min to destination</div>
+        <div class="live-activity-subtitle" id="liveActivitySubtitle">Destination name</div>
+        <div class="live-activity-progress-container">
+            <div class="live-activity-progress" id="liveActivityProgress" style="width: 0%"></div>
+            <div class="live-activity-dot" id="liveActivityDot" style="left: 0%"></div>
         </div>
     </div>
     
@@ -483,8 +487,8 @@
             document.getElementById('setAlarm').classList.remove('hidden');
             showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
             
-            // Hide progress notification
-            hideProgressNotification();
+            // Hide live activity
+            hideLiveActivity();
             
             // Stop journey in service worker
             if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
@@ -526,8 +530,8 @@
                 // Update distance display
                 updateDistanceDisplay(distance);
                 
-                // Update progress notification
-                updateProgressNotification(distance);
+                // Update live activity
+                updateLiveActivity(distance);
                 
                 // Send location update to service worker
                 if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
@@ -568,37 +572,34 @@
             return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
         }
 
-        // Show progress notification in-app
-        function showProgressNotification() {
-            const progressNotification = document.getElementById('progressNotification');
-            progressNotification.classList.remove('hidden');
+        // Show live activity
+        function showLiveActivity() {
+            const liveActivity = document.getElementById('liveActivity');
+            liveActivity.classList.remove('hidden');
         }
 
-        // Hide progress notification
-        function hideProgressNotification() {
-            const progressNotification = document.getElementById('progressNotification');
-            progressNotification.classList.add('hidden');
-            
-            // Reset progress
-            document.getElementById('progressBar').style.width = '0%';
-            document.getElementById('progressIcon').style.left = '0%';
+        // Hide live activity
+        function hideLiveActivity() {
+            const liveActivity = document.getElementById('liveActivity');
+            liveActivity.classList.add('hidden');
         }
 
-        // Update progress notification
-        function updateProgressNotification(currentDistance) {
+        // Update live activity
+        function updateLiveActivity(currentDistance) {
             if (!initialDistance) return;
             
             const progress = calculateProgress(currentDistance);
-            const progressBar = document.getElementById('progressBar');
-            const progressIcon = document.getElementById('progressIcon');
-            const progressText = document.getElementById('progressNotificationText');
+            const progressBar = document.getElementById('liveActivityProgress');
+            const progressDot = document.getElementById('liveActivityDot');
+            const title = document.getElementById('liveActivityTitle');
+            const subtitle = document.getElementById('liveActivitySubtitle');
             
             // Update progress bar width
             progressBar.style.width = `${progress}%`;
             
-            // Update icon position (keep it slightly ahead of the progress bar)
-            const iconPosition = Math.min(98, progress);
-            progressIcon.style.left = `${iconPosition}%`;
+            // Update dot position
+            const dotPosition = Math.min(98, progress);
+            progressDot.style.left = `${dotPosition}%`;
             
             // Calculate remaining time
             const speed = 5; // meters per second (walking speed)
@@ -607,10 +608,16 @@
             
             // Update text
             if (remainingMinutes <= 1) {
-                progressText.textContent = `Almost there!`;
+                title.textContent = `Almost there!`;
             } else {
-                progressText.textContent = `${remainingMinutes} min to destination`;
+                title.textContent = `${remainingMinutes} min to destination`;
             }
+            
+            // Update subtitle with destination name
+            subtitle.textContent = appState.currentDestination || 'Destination';
+            
+            // Show the live activity if it's hidden
+            showLiveActivity();
         }
 
         // Set alarm
@@ -748,8 +755,9 @@
                     appState.journeyStartTime = Date.now();
                     localStorage.setItem('journeyState', JSON.stringify(appState));
                     
-                    // Show progress notification
-                    showProgressNotification();
+                    // Show live activity
+                    showLiveActivity();
+                    updateLiveActivity(initialDistance);
                     
                     // Calculate estimated arrival time
                     const speed = 5; // meters per second (walking speed)
@@ -817,7 +825,6 @@
             initMap();
             document.getElementById('setAlarm').addEventListener('click', () => setAlarm(false));
             document.getElementById('stopAlarm').addEventListener('click', stopAlarm);
-            document.getElementById('closeProgressNotification').addEventListener('click', hideProgressNotification);
 
             document.getElementById('settingsBtn').addEventListener('click', () => {
                 document.getElementById('mainPage').classList.add('hidden');
@@ -911,32 +918,6 @@
                     showAlert('Journey canceled', 'info');
                 }
             });
-            
-            // Add test notification button (for debugging)
-            const testButton = document.createElement('button');
-            testButton.textContent = 'Test Notification';
-            testButton.className = 'fixed bottom-4 right-4 bg-blue-500 text-white p-2 rounded-lg';
-            testButton.addEventListener('click', () => {
-                if (Notification.permission === "granted") {
-                    if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
-                        serviceWorkerRegistration.active.postMessage({
-                            type: 'TEST_NOTIFICATION'
-                        });
-                        showAlert('Test notification sent', 'info');
-                    } else {
-                        showAlert('Service worker not ready', 'error');
-                    }
-                } else {
-                    Notification.requestPermission().then(permission => {
-                        if (permission === "granted") {
-                            showAlert('Notification permission granted, try again', 'success');
-                        } else {
-                            showAlert('Notification permission denied', 'error');
-                        }
-                    });
-                }
-            });
-            document.body.appendChild(testButton);
         }
 
         function updateAlarmSound() {
