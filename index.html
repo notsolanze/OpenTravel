@@ -52,7 +52,7 @@
             background-color: #1F2937;
             border-top-left-radius: 20px;
             border-top-right-radius: 20px;
-            z-index: 900; /* Reduced z-index to be below compass button */
+            z-index: 900; /* Keep this lower than the live activity and settings button */
             box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
             transition: transform 0.3s ease, height 0.3s ease;
             touch-action: pan-x; /* Only allow horizontal panning */
@@ -191,7 +191,7 @@
             border-radius: 16px;
             padding: 12px 16px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            z-index: 2500; /* Significantly increased z-index */
+            z-index: 9500; /* Extremely high z-index to be above everything */
             display: flex;
             flex-direction: column;
             transition: all 0.3s ease;
@@ -369,7 +369,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 2500; /* Significantly increased z-index */
+            z-index: 9000; /* Extremely high z-index to be above everything */
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             cursor: pointer;
         }
@@ -1580,6 +1580,7 @@ function deleteRecentLocation(index) {
             liveActivity.style.display = 'flex';
             liveActivity.style.visibility = 'visible';
             liveActivity.style.opacity = '1';
+            liveActivity.style.zIndex = '9500'; // Force high z-index
             
             // If it was previously minimized, keep it minimized
             if (isLiveActivityMinimized) {
@@ -1588,7 +1589,7 @@ function deleteRecentLocation(index) {
                 liveActivity.classList.remove('minimized');
             }
             
-            console.log('Live activity shown on map page');
+            console.log('Live activity shown on map page with high z-index');
         }
 
         // Hide live activity
