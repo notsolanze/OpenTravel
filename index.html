@@ -39,23 +39,6 @@
             z-index: 1000;
         }
         
-        /* Status bar */
-        .status-bar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 40px;
-            background-color: rgba(17, 24, 39, 0.8);
-            backdrop-filter: blur(8px);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 16px;
-            z-index: 1000;
-            color: white;
-        }
-        
         /* Bottom sheet */
         .bottom-sheet {
             position: fixed;
@@ -602,16 +585,6 @@
         <p class="splash-subtitle">Your journey companion</p>
         <div class="splash-loader">
             <div class="splash-loader-bar"></div>
-        </div>
-    </div>
-
-    <!-- Status Bar -->
-    <div class="status-bar">
-        <div class="time font-semibold">04:00</div>
-        <div class="status-icons flex items-center gap-2 clickable">
-            <i data-lucide="navigation" class="w-4 h-4"></i>
-            <i data-lucide="wifi" class="w-4 h-4"></i>
-            <i data-lucide="battery" class="w-4 h-4"></i>
         </div>
     </div>
 
@@ -2212,3 +2185,4 @@ function deleteRecentLocation(index) {
     </script>
 </body>
 </html>
+
