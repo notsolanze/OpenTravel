@@ -58,6 +58,20 @@
             transform: translate(-50%, 150%);
             opacity: 0;
         }
+        .live-activity.minimized {
+            width: 50px;
+            height: 50px;
+            border-radius: 25px;
+            padding: 0;
+            bottom: 20px;
+            right: 20px;
+            left: auto;
+            transform: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
         .live-activity-header {
             display: flex;
             justify-content: space-between;
@@ -115,6 +129,40 @@
             background-color: white;
             border-radius: 50%;
             transition: left 0.5s ease;
+        }
+        .live-activity-controls {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 4px;
+        }
+        .live-activity-button {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        .live-activity-button:hover {
+            color: white;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        .live-activity-content {
+            width: 100%;
+        }
+        .minimized-icon {
+            display: none;
+        }
+        .live-activity.minimized .minimized-icon {
+            display: block;
+        }
+        .live-activity.minimized .live-activity-content,
+        .live-activity.minimized .live-activity-controls {
+            display: none;
         }
         
         /* Splash screen styles */
@@ -287,21 +335,34 @@
         </div>
     </div>
     
-    <!-- Live Activity (iOS style) -->
+    <!-- Live Activity (iOS style) - Now with minimize/maximize functionality -->
     <div id="liveActivity" class="live-activity hidden">
-        <div class="live-activity-header">
-            <div class="live-activity-app">
-                <div class="live-activity-app-icon">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-                </div>
-                <div class="live-activity-app-name">OpenTravel</div>
-            </div>
+        <!-- Minimized view icon -->
+        <div class="minimized-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>
         </div>
-        <div class="live-activity-title" id="liveActivityTitle">0 min to destination</div>
-        <div class="live-activity-subtitle" id="liveActivitySubtitle">Destination name</div>
-        <div class="live-activity-progress-container">
-            <div class="live-activity-progress" id="liveActivityProgress" style="width: 0%"></div>
-            <div class="live-activity-dot" id="liveActivityDot" style="left: 0%"></div>
+        
+        <!-- Full view content -->
+        <div class="live-activity-content">
+            <div class="live-activity-header">
+                <div class="live-activity-app">
+                    <div class="live-activity-app-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                    </div>
+                    <div class="live-activity-app-name">OpenTravel</div>
+                </div>
+            </div>
+            <div class="live-activity-title" id="liveActivityTitle">0 min to destination</div>
+            <div class="live-activity-subtitle" id="liveActivitySubtitle">Destination name</div>
+            <div class="live-activity-progress-container">
+                <div class="live-activity-progress" id="liveActivityProgress" style="width: 0%"></div>
+                <div class="live-activity-dot" id="liveActivityDot" style="left: 0%"></div>
+            </div>
+            <div class="live-activity-controls">
+                <button class="live-activity-button" id="minimizeActivity" title="Minimize">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3"></path><path d="M21 8h-3a2 2 0 0 1-2-2V3"></path><path d="M3 16h3a2 2 0 0 1 2 2v3"></path><path d="M16 21v-3a2 2 0 0 1 2-2h3"></path></svg>
+                </button>
+            </div>
         </div>
     </div>
     
@@ -338,6 +399,7 @@
             currentRadius: null,
             journeyStartTime: null
         };
+        let isLiveActivityMinimized = false;
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
@@ -425,7 +487,43 @@
             
             // Initialize the app
             initApp();
+            
+            // Set up Live Activity minimize/maximize functionality
+            setupLiveActivityControls();
         });
+        
+        // Setup Live Activity controls
+        function setupLiveActivityControls() {
+            const liveActivity = document.getElementById('liveActivity');
+            const minimizeBtn = document.getElementById('minimizeActivity');
+            
+            // Minimize button click
+            minimizeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                minimizeLiveActivity();
+            });
+            
+            // Click on minimized activity to maximize
+            liveActivity.addEventListener('click', () => {
+                if (isLiveActivityMinimized) {
+                    maximizeLiveActivity();
+                }
+            });
+        }
+        
+        // Minimize Live Activity
+        function minimizeLiveActivity() {
+            const liveActivity = document.getElementById('liveActivity');
+            liveActivity.classList.add('minimized');
+            isLiveActivityMinimized = true;
+        }
+        
+        // Maximize Live Activity
+        function maximizeLiveActivity() {
+            const liveActivity = document.getElementById('liveActivity');
+            liveActivity.classList.remove('minimized');
+            isLiveActivityMinimized = false;
+        }
         
         // Initialize map
         function initMap() {
@@ -577,6 +675,13 @@
         function showLiveActivity() {
             const liveActivity = document.getElementById('liveActivity');
             liveActivity.classList.remove('hidden');
+            
+            // If it was previously minimized, keep it minimized
+            if (isLiveActivityMinimized) {
+                liveActivity.classList.add('minimized');
+            } else {
+                liveActivity.classList.remove('minimized');
+            }
         }
 
         // Hide live activity
