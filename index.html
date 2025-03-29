@@ -24,7 +24,7 @@
         }
         .distance-badge {
             position: fixed;
-            top: 75px;
+            top: 30px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 1000;
@@ -178,8 +178,8 @@
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            width: 90%;
-            max-width: 350px;
+            width: 95%;
+            max-width: 380px;
             background-color: rgba(17, 24, 39, 0.9);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
@@ -626,9 +626,9 @@
                 <i data-lucide="briefcase" class="w-5 h-5 text-blue-500"></i>
                 <span>Work</span>
             </button>
-            <button class="quick-access-button clickable" id="newButton">
-                <i data-lucide="plus" class="w-5 h-5 text-cyan-500"></i>
-                <span>New</span>
+            <button class="quick-access-button clickable" id="settingsButton">
+                <i data-lucide="settings" class="w-5 h-5 text-cyan-500"></i>
+                <span>Settings</span>
             </button>
         </div>
         
@@ -1067,11 +1067,11 @@
                 }
             });
             
-            document.getElementById('newButton').addEventListener('click', function(e) {
+            // Replace the newButton click handler with settingsButton
+            document.getElementById('settingsButton').addEventListener('click', function(e) {
                 e.stopPropagation(); // Stop event from propagating
-                console.log('New button clicked');
-                document.getElementById('destination').value = '';
-                document.getElementById('destinationModal').classList.remove('hidden');
+                console.log('Settings button clicked');
+                openSettings();
             });
 
             // Add keyboard support for destination input
