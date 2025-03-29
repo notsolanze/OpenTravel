@@ -83,6 +83,11 @@
             display: flex;
             align-items: center;
             color: #D1D5DB;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .search-bar:hover {
+            background-color: #4B5563;
         }
         .quick-access {
             display: flex;
@@ -479,13 +484,19 @@
                 <label for="radius" class="block text-sm font-medium text-gray-300 mb-1">Alarm Radius (meters)</label>
                 <input type="number" id="radius" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 text-white" value="1000">
             </div>
-            <div class="flex justify-center space-x-4">
-                <button id="setAlarm" class="bg-green-500 text-white p-3 rounded-full hover:bg-green-600 transition duration-300">
-                    <i data-lucide="bell" class="w-6 h-6"></i>
+            <div class="flex justify-between items-center mt-6">
+                <button id="closeDestinationModal" class="bg-gray-700 text-white py-2 px-4 rounded-lg hover:bg-gray-600 transition duration-300">
+                    Cancel
                 </button>
-                <button id="stopAlarm" class="bg-red-500 text-white p-3 rounded-full hover:bg-red-600 transition duration-300 hidden">
-                    <i data-lucide="bell-off" class="w-6 h-6"></i>
-                </button>
+                <div class="flex space-x-3">
+                    <button id="stopAlarm" class="bg-red-500 text-white p-3 rounded-full hover:bg-red-600 transition duration-300 hidden">
+                        <i data-lucide="bell-off" class="w-6 h-6"></i>
+                    </button>
+                    <button id="setAlarm" class="bg-green-500 text-white py-2 px-6 rounded-lg hover:bg-green-600 transition duration-300 flex items-center gap-2">
+                        <i data-lucide="navigation" class="w-5 h-5"></i>
+                        <span>Go</span>
+                    </button>
+                </div>
             </div>
             <p id="status" class="mt-4 text-sm text-gray-400 text-center"></p>
         </div>
@@ -684,9 +695,6 @@
         if (savedRecentLocations) {
             try {
                 recentLocations = JSON.parse(savedRecentLocations);
-            } catch  {
-            try {
-                recentLocations = JSON.parse(savedRecentLocations);
             } catch (e) {
                 console.error('Error parsing recent locations:', e);
                 recentLocations = [];
@@ -738,8 +746,10 @@
             setTimeout(() => {
                 const splashScreen = document.getElementById('splashScreen');
                 splashScreen.style.opacity = '0';
+                console.log('Hiding splash screen');
                 setTimeout(() => {
                     splashScreen.style.display = 'none';
+                    console.log('Splash screen hidden');
                 }, 500);
             }, 2000);
             
@@ -860,6 +870,13 @@
             document.getElementById('newButton').addEventListener('click', function() {
                 document.getElementById('destination').value = '';
                 document.getElementById('destinationModal').classList.remove('hidden');
+            });
+
+            // Add keyboard support for destination input
+            document.getElementById('destination').addEventListener('keyup', function(event) {
+                if (event.key === 'Enter') {
+                    setAlarm(false);
+                }
             });
         }
         
@@ -1712,7 +1729,7 @@
             alertPopup.classList.remove('border-l-4', 'border-green-500', 'border-red-500', 'border-blue-500');
             document.getElementById('alertIcon').classList.remove('bg-green-900', 'bg-red-900', 'bg-blue-900');
         }
-    }
     </script>
 </body>
 </html>
+
