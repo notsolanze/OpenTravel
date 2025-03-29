@@ -114,6 +114,78 @@
             opacity: 1;
         }
         
+        /* Splash screen styles */
+        #splashScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #10B981;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease-out;
+        }
+        .splash-logo {
+            width: 120px;
+            height: 120px;
+            margin-bottom: 20px;
+            animation: pulse 2s infinite;
+        }
+        .splash-title {
+            font-size: 2rem;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 10px;
+        }
+        .splash-subtitle {
+            font-size: 1rem;
+            color: rgba(255, 255, 255, 0.8);
+        }
+        .splash-loader {
+            margin-top: 30px;
+            width: 200px;
+            height: 4px;
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 2px;
+            overflow: hidden;
+            position: relative;
+        }
+        .splash-loader-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 0%;
+            background-color: white;
+            border-radius: 2px;
+            animation: loading 2s ease-in-out forwards;
+        }
+        
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+        
+        @keyframes loading {
+            0% {
+                width: 0%;
+            }
+            100% {
+                width: 100%;
+            }
+        }
+        
         @media (prefers-color-scheme: dark) {
           .notification {
             background: #1a1a1a;
@@ -129,6 +201,16 @@
     </style>
 </head>
 <body class="bg-gray-100">
+    <!-- Splash Screen -->
+    <div id="splashScreen">
+        <img src="https://cdn-icons-png.flaticon.com/512/10473/10473293.png" alt="OpenTravel Logo" class="splash-logo">
+        <h1 class="splash-title">OpenTravel</h1>
+        <p class="splash-subtitle">Your journey companion</p>
+        <div class="splash-loader">
+            <div class="splash-loader-bar"></div>
+        </div>
+    </div>
+
     <div id="app" class="max-w-md mx-auto bg-white shadow-lg overflow-hidden min-h-screen">
         <div class="bg-green-500 text-white p-4 flex justify-between items-center">
             <h1 class="text-2xl font-bold">OpenTravel</h1>
@@ -245,6 +327,7 @@
         let backgroundInterval;
         let initialDistance = 0;
         let journeyStartTime = null;
+        let serviceWorkerRegistration = null;
 
         // Load settings from session storage
         let settings = JSON.parse(sessionStorage.getItem('alarmSettings')) || {
@@ -253,6 +336,18 @@
             enableNotifications: true,
             updateInterval: 30
         };
+        
+        // Handle splash screen
+        document.addEventListener('DOMContentLoaded', () => {
+            // Show splash screen for 2 seconds
+            setTimeout(() => {
+                const splashScreen = document.getElementById('splashScreen');
+                splashScreen.style.opacity = '0';
+                setTimeout(() => {
+                    splashScreen.style.display = 'none';
+                }, 500);
+            }, 2000);
+        });
         
         // Initialize map
         function initMap() {
@@ -278,9 +373,6 @@
                 if ('vibrate' in navigator) {
                     navigator.vibrate([200, 100, 200]);
                 }
-
-                // Show arrival notification
-                showArrivalNotification();
             }
         }
 
@@ -299,8 +391,8 @@
             hideProgressNotification();
             
             // Stop journey in service worker
-            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage({
+            if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+                serviceWorkerRegistration.active.postMessage({
                     type: 'STOP_JOURNEY'
                 });
             }
@@ -338,8 +430,8 @@
                 updateProgressNotification(distance);
                 
                 // Send location update to service worker
-                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.controller.postMessage({
+                if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+                    serviceWorkerRegistration.active.postMessage({
                         type: 'UPDATE_LOCATION',
                         location: { latitude, longitude },
                         distance: distance
@@ -425,6 +517,22 @@
                 return;
             }
 
+            // Request notification permission if not already granted
+            if (settings.enableNotifications && Notification.permission !== "granted") {
+                Notification.requestPermission().then(permission => {
+                    if (permission === "granted") {
+                        proceedWithAlarmSetup(destinationInput);
+                    } else {
+                        showAlert('Notification permission is required for this app to work properly', 'error');
+                    }
+                });
+            } else {
+                proceedWithAlarmSetup(destinationInput);
+            }
+        }
+        
+        // Proceed with alarm setup after permission check
+        function proceedWithAlarmSetup(destinationInput) {
             fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destinationInput)}, Philippines`)
                 .then(response => response.json())
                 .then(data => {
@@ -496,8 +604,8 @@
                                 const estimatedArrivalTime = new Date(journeyStartTime + (estimatedTimeSeconds * 1000));
                                 
                                 // Start journey in service worker
-                                if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                                    navigator.serviceWorker.controller.postMessage({
+                                if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+                                    serviceWorkerRegistration.active.postMessage({
                                         type: 'START_JOURNEY',
                                         journeyData: {
                                             destination: destination,
@@ -529,21 +637,6 @@
                     console.error('Error geocoding destination:', error);
                     showAlert('Error finding destination. Please try again.', 'error');
                 });
-        }
-
-        // Show arrival notification
-        function showArrivalNotification() {
-            if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-                // The service worker will handle the arrival notification
-            } else {
-                // Fallback for browsers without service worker support
-                if (Notification.permission === "granted") {
-                    new Notification('OpenTravel', {
-                        body: 'You have reached your destination!',
-                        icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png'
-                    });
-                }
-            }
         }
 
         // Calculate distance between two points
@@ -670,6 +763,7 @@
                 navigator.serviceWorker.register('/service-worker.js')
                     .then(registration => {
                         console.log('Service Worker registered with scope:', registration.scope);
+                        serviceWorkerRegistration = registration;
                     })
                     .catch(error => {
                         console.error('Service Worker registration failed:', error);
