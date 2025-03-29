@@ -39,23 +39,6 @@
             z-index: 1000;
         }
         
-        /* Status bar */
-        .status-bar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 40px;
-            background-color: rgba(17, 24, 39, 0.8);
-            backdrop-filter: blur(8px);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 16px;
-            z-index: 1000;
-            color: white;
-        }
-        
         /* Bottom sheet */
         .bottom-sheet {
             position: fixed;
@@ -150,40 +133,44 @@
             z-index: 1001;
         }
         .recent-location-item {
-    display: flex;
-    align-items: center;
-    padding: 12px 0;
-    border-bottom: 1px solid #374151;
-    cursor: pointer;
-    position: relative;
-    overflow: hidden;
-    transition: transform 0.3s ease;
-    touch-action: pan-y;
-}
+            display: flex;
+            align-items: center;
+            padding: 0;
+            border-bottom: 1px solid #374151;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s ease;
+            touch-action: pan-y;
+        }
 
-.recent-location-content {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    padding: 0;
-    transform: translateX(0);
-    transition: transform 0.3s ease;
-    background-color: #1F2937;
-    z-index: 1;
-}
+        .recent-location-content {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            padding: 12px 0;
+            transform: translateX(0);
+            transition: transform 0.3s ease;
+            background-color: #1F2937;
+            z-index: 1;
+        }
 
-.delete-button {
-    position: absolute;
-    right: 0;
-    height: 100%;
-    background-color: #EF4444;
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 70px;
-    z-index: 0;
-}
+        .delete-button {
+            position: absolute;
+            right: 0;
+            width: 70px;
+            height: 100%;
+            background-color: #EF4444;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 0;
+        }
+
+        .recent-location-item.swiped .recent-location-content {
+            transform: translateX(-70px);
+        }
         
         /* Live Activity styles */
         .live-activity {
@@ -582,16 +569,6 @@
         <p class="splash-subtitle">Your journey companion</p>
         <div class="splash-loader">
             <div class="splash-loader-bar"></div>
-        </div>
-    </div>
-
-    <!-- Status Bar -->
-    <div class="status-bar">
-        <div class="time font-semibold">04:00</div>
-        <div class="status-icons flex items-center gap-2 clickable">
-            <i data-lucide="navigation" class="w-4 h-4"></i>
-            <i data-lucide="wifi" class="w-4 h-4"></i>
-            <i data-lucide="battery" class="w-4 h-4"></i>
         </div>
     </div>
 
@@ -1856,12 +1833,6 @@ function deleteRecentLocation(index) {
             document.getElementById('stopAlarm').addEventListener('click', (e) => {
                 e.stopPropagation();
                 stopAlarm();
-            });
-            
-            // Settings button - only attach to the status icons, not the entire bar
-            document.querySelector('.status-icons').addEventListener('click', function(e) {
-                e.stopPropagation(); // Stop event from propagating
-                openSettings();
             });
             
             // Back from settings
