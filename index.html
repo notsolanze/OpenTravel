@@ -446,6 +446,32 @@
     </style>
 </head>
 <body class="bg-gray-900 text-white">
+    <script>
+    // Ensure splash screen hides even if there are errors
+    window.addEventListener('load', function() {
+        console.log('Window loaded, will hide splash screen soon');
+        setTimeout(function() {
+            var splashScreen = document.getElementById('splashScreen');
+            if (splashScreen) {
+                splashScreen.style.opacity = '0';
+                console.log('Hiding splash screen from window load event');
+                setTimeout(function() {
+                    splashScreen.style.display = 'none';
+                    console.log('Splash screen hidden from window load event');
+                }, 500);
+            }
+        }, 2000);
+    });
+    
+    // Fallback to hide splash screen after a maximum time
+    setTimeout(function() {
+        var splashScreen = document.getElementById('splashScreen');
+        if (splashScreen && splashScreen.style.display !== 'none') {
+            console.log('Forcing splash screen hide after timeout');
+            splashScreen.style.display = 'none';
+        }
+    }, 5000);
+</script>
     <!-- Splash Screen -->
     <div id="splashScreen">
         <img src="https://cdn-icons-png.flaticon.com/512/10473/10473293.png" alt="OpenTravel Logo" class="splash-logo">
@@ -784,12 +810,16 @@
             // Show splash screen for 2 seconds
             setTimeout(() => {
                 const splashScreen = document.getElementById('splashScreen');
-                splashScreen.style.opacity = '0';
-                console.log('Hiding splash screen');
-                setTimeout(() => {
-                    splashScreen.style.display = 'none';
-                    console.log('Splash screen hidden');
-                }, 500);
+                if (splashScreen) {
+                    splashScreen.style.opacity = '0';
+                    console.log('Hiding splash screen from DOMContentLoaded');
+                    setTimeout(() => {
+                        splashScreen.style.display = 'none';
+                        console.log('Splash screen hidden from DOMContentLoaded');
+                    }, 500);
+                } else {
+                    console.error('Splash screen element not found');
+                }
             }, 2000);
             
             // Request notification permission immediately
