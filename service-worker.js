@@ -160,18 +160,52 @@ self.addEventListener('message', (event) => {
         notifications.forEach(notification => notification.close());
       });
   } else if (event.data && event.data.type === 'TEST_NOTIFICATION') {
-    // Send a test notification
-    self.registration.showNotification('OPEN TRAVEL - Test', {
-      body: 'This is a test notification',
-      icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-      badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-      tag: 'test-notification',
-      renotify: true,
-      requireInteraction: true,
-      vibrate: [200, 100, 200]
-    });
+    // Send a test notification with progress bar
+    showProgressNotification(0.5, "Test progress notification", "This is a test notification with a progress bar");
   }
 });
+
+// Show a notification with a progress bar
+function showProgressNotification(progressValue, title, body) {
+  const options = {
+    body: body,
+    icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+    badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+    tag: notificationTag, // Use the same tag to update existing notification
+    renotify: false, // Don't notify again when updating
+    silent: true,
+    requireInteraction: true,
+    actions: [
+      {
+        action: 'view',
+        title: 'View'
+      },
+      {
+        action: 'cancel',
+        title: 'Cancel'
+      }
+    ],
+    // This is the key part - add a progress indicator
+    image: createProgressBarImage(progressValue),
+    data: {
+      progress: progressValue,
+      timestamp: Date.now()
+    }
+  };
+  
+  self.registration.showNotification(title, options);
+}
+
+// Create a data URL for a progress bar image
+function createProgressBarImage(progress) {
+  // We'll use a simple URL that represents a progress bar
+  // In a real implementation, you might want to generate an actual image
+  return `data:image/svg+xml;charset=UTF-8,
+    <svg width="400" height="20" xmlns="http://www.w3.org/2000/svg">
+      <rect width="400" height="20" fill="#eee" rx="10" ry="10"/>
+      <rect width="${progress * 400}" height="20" fill="#10B981" rx="10" ry="10"/>
+    </svg>`;
+}
 
 // Start journey and show initial notification
 function startJourney() {
@@ -187,96 +221,22 @@ function startJourney() {
     hour12: true
   });
   
-  // Create the notification options
-  const options = {
-    body: `Your travel has started!`,
-    icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-    tag: notificationTag,
-    renotify: true,
-    silent: false,
-    vibrate: [200, 100, 200],
-    requireInteraction: true,
-    actions: [
-      {
-        action: 'view',
-        title: 'View'
-      },
-      {
-        action: 'cancel',
-        title: 'Cancel'
-      }
-    ],
-    // This is where we store data for our notification
-    data: {
-      progress: 0,
-      destinationName,
-      timestamp: Date.now(),
-      initialDistance: initialDistance
-    }
-  };
-  
   console.log('[Service Worker] Showing start journey notification');
   
-  // Show the notification
-  self.registration.showNotification('OPEN TRAVEL - Your travel has started!', options);
-  
-  // Schedule an update after a short delay to show the progress notification
-  setTimeout(() => {
-    if (journeyData) {
-      updateJourneyProgress(null, initialDistance * 0.95); // Start with a small progress
-    }
-  }, 3000);
-}
-
-// Update journey progress
-function updateJourneyProgress(location, currentDistance) {
-  if (!journeyData) return;
-  
-  // Calculate progress percentage (0-100)
-  const progress = Math.min(100, Math.max(0, 
-    ((initialDistance - currentDistance) / initialDistance) * 100
-  ));
-  
-  // Calculate remaining time in minutes
-  const speed = journeyData.speed || 5; // meters per second (walking speed)
-  const remainingTimeSeconds = currentDistance / speed;
-  const remainingMinutes = Math.ceil(remainingTimeSeconds / 60);
-  
-  // Create progress bar string (20 characters)
-  const progressBarLength = 20;
-  const filledLength = Math.round((progress / 100) * progressBarLength);
-  const emptyLength = progressBarLength - filledLength;
-  const progressBar = '█'.repeat(filledLength) + '░'.repeat(emptyLength);
-  
-  // Format the message based on remaining time
-  let message;
-  if (currentDistance <= 10) {
-    message = `You have reached your destination!`;
-    showArrivalNotification();
-    return;
-  } else if (remainingMinutes <= 1) {
-    message = `Almost there! ${progressBar}`;
-  } else {
-    message = `Approx arrive ${remainingMinutes} mins\n${progressBar}`;
-  }
-  
-  console.log('[Service Worker] Updating journey progress notification');
-  
-  // Get all existing notifications
+  // First, close any existing notifications with the same tag
   self.registration.getNotifications({ tag: notificationTag })
     .then(notifications => {
-      // Close existing notifications
       notifications.forEach(notification => notification.close());
       
-      // Create new notification options
+      // Show the initial notification
       const options = {
-        body: message,
+        body: `Your travel has started!`,
         icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
         badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
         tag: notificationTag,
         renotify: true,
-        silent: true, // Silent updates for progress
+        silent: false,
+        vibrate: [200, 100, 200],
         requireInteraction: true,
         actions: [
           {
@@ -289,6 +249,81 @@ function updateJourneyProgress(location, currentDistance) {
           }
         ],
         data: {
+          progress: 0,
+          destinationName,
+          timestamp: Date.now(),
+          initialDistance: initialDistance
+        }
+      };
+      
+      // Show the notification
+      self.registration.showNotification('OPEN TRAVEL - Your travel has started!', options);
+      
+      // Schedule an update after a short delay to show the progress notification
+      setTimeout(() => {
+        if (journeyData) {
+          updateJourneyProgress(null, initialDistance * 0.95); // Start with a small progress
+        }
+      }, 3000);
+    });
+}
+
+// Update journey progress
+function updateJourneyProgress(location, currentDistance) {
+  if (!journeyData) return;
+  
+  // Calculate progress percentage (0-100)
+  const progress = Math.min(100, Math.max(0, 
+    ((initialDistance - currentDistance) / initialDistance) * 100
+  )) / 100; // Convert to 0-1 range for the progress bar
+  
+  // Calculate remaining time in minutes
+  const speed = journeyData.speed || 5; // meters per second (walking speed)
+  const remainingTimeSeconds = currentDistance / speed;
+  const remainingMinutes = Math.ceil(remainingTimeSeconds / 60);
+  
+  // Format the message based on remaining time
+  let message;
+  if (currentDistance <= 10) {
+    message = `You have reached your destination!`;
+    showArrivalNotification();
+    return;
+  } else if (remainingMinutes <= 1) {
+    message = `Almost there!`;
+  } else {
+    message = `Approx arrive ${remainingMinutes} mins`;
+  }
+  
+  console.log('[Service Worker] Updating journey progress notification');
+  
+  // First, close any existing notifications with the same tag
+  self.registration.getNotifications({ tag: notificationTag })
+    .then(notifications => {
+      // We'll update the notification instead of closing and creating a new one
+      // This approach helps maintain a single persistent notification
+      
+      // Create new notification options with progress bar
+      const options = {
+        body: message,
+        icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
+        tag: notificationTag,
+        renotify: false, // Don't notify again when updating
+        silent: true, // Silent updates for progress
+        requireInteraction: true,
+        actions: [
+          {
+            action: 'view',
+            title: 'View'
+          },
+          {
+            action: 'cancel',
+            title: 'Cancel'
+          }
+        ],
+        // Add a visual progress bar as an image
+        image: createProgressBarImage(progress),
+        data: {
           progress: progress,
           destinationName: journeyData.destinationName,
           timestamp: Date.now(),
@@ -297,7 +332,10 @@ function updateJourneyProgress(location, currentDistance) {
         }
       };
       
-      // Show the updated notification
+      // Close existing notifications first
+      notifications.forEach(notification => notification.close());
+      
+      // Then show the updated notification
       self.registration.showNotification('OPEN TRAVEL - Approx arrive ' + remainingMinutes + ' mins', options);
     });
 }
@@ -318,7 +356,7 @@ function showArrivalNotification() {
         body: `You have reached your destination!`,
         icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
         badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-        tag: 'opentravel-arrival',
+        tag: 'opentravel-arrival', // Different tag for arrival notification
         vibrate: [200, 100, 200, 100, 200],
         requireInteraction: true,
         silent: false,
