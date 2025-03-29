@@ -191,7 +191,7 @@
             border-radius: 16px;
             padding: 12px 16px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-            z-index: 1100;
+            z-index: 1500; /* Increased z-index to ensure visibility */
             display: flex;
             flex-direction: column;
             transition: all 0.3s ease;
@@ -369,7 +369,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 950;
+            z-index: 1500; /* Increased z-index to be above other elements */
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             cursor: pointer;
         }
@@ -1582,6 +1582,10 @@ function deleteRecentLocation(index) {
             } else {
                 liveActivity.classList.remove('minimized');
             }
+            
+            // Force display
+            liveActivity.style.display = 'flex';
+            console.log('Live activity shown');
         }
 
         // Hide live activity
@@ -1593,6 +1597,8 @@ function deleteRecentLocation(index) {
         // Update live activity
         function updateLiveActivity(currentDistance) {
             if (!initialDistance) return;
+            
+            console.log('Updating live activity, distance:', currentDistance);
             
             const progress = calculateProgress(currentDistance);
             const progressBar = document.getElementById('liveActivityProgress');
