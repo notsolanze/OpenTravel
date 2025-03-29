@@ -149,6 +149,57 @@
             position: relative;
             z-index: 1001;
         }
+
+        /* Add these styles in the style section */
+        .recent-location-item {
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s ease;
+            touch-action: pan-x;
+        }
+
+        .recent-location-content {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            transition: transform 0.3s ease;
+            background-color: #1F2937;
+        }
+
+        .delete-button {
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            background-color: #EF4444;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 70px;
+            transform: translateX(70px);
+            transition: transform 0.3s ease;
+        }
+
+        .recent-location-item.swiped .recent-location-content {
+            transform: translateX(-70px);
+        }
+
+        .recent-location-item.swiped .delete-button {
+            transform: translateX(0);
+        }
+
+        /* Settings icon in top right */
+        .settings-icon {
+            position: fixed;
+            top: 0;
+            right: 16px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            z-index: 1001;
+        }
+        
         .recent-location-item {
             display: flex;
             align-items: center;
@@ -573,6 +624,10 @@
             <i data-lucide="navigation" class="w-4 h-4"></i>
             <i data-lucide="wifi" class="w-4 h-4"></i>
             <i data-lucide="battery" class="w-4 h-4"></i>
+        </div>
+        <!-- In the Status Bar section, add this before the closing div -->
+        <div class="settings-icon clickable" id="settingsIcon">
+            <i data-lucide="settings" class="w-5 h-5 text-white"></i>
         </div>
     </div>
 
@@ -1229,7 +1284,7 @@
             }
         }
         
-        // Populate recent locations
+        // Replace the populateRecentLocations function with this updated version
         function populateRecentLocations() {
             const recentLocationsContainer = document.getElementById('recentLocations');
             recentLocationsContainer.innerHTML = '';
@@ -1242,10 +1297,16 @@
             // Show only the last 5 locations
             const locationsToShow = recentLocations.slice(0, 5);
             
-            locationsToShow.forEach(location => {
+            locationsToShow.forEach((location, index) => {
                 const locationItem = document.createElement('div');
-                locationItem.className = 'recent-location-item clickable';
-                locationItem.innerHTML = `
+                locationItem.className = 'recent-location-item';
+                locationItem.dataset.index = index;
+                
+                // Create the content container
+                const contentContainer = document.createElement('div');
+                contentContainer.className = 'recent-location-content';
+                
+                contentContainer.innerHTML = `
                     <div class="recent-location-icon">
                         <i data-lucide="history" class="w-5 h-5"></i>
                     </div>
@@ -1255,7 +1316,28 @@
                     </div>
                 `;
                 
-                locationItem.addEventListener('click', (e) => {
+                // Create delete button
+                const deleteButton = document.createElement('div');
+                deleteButton.className = 'delete-button';
+                deleteButton.innerHTML = `
+                    <i data-lucide="trash-2" class="w-5 h-5"></i>
+                `;
+                
+                // Add event listener to delete button
+                deleteButton.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    deleteRecentLocation(index);
+                });
+                
+                // Add content and delete button to item
+                locationItem.appendChild(contentContainer);
+                locationItem.appendChild(deleteButton);
+                
+                // Add swipe functionality
+                addSwipeToDelete(locationItem);
+                
+                // Add click event to content
+                contentContainer.addEventListener('click', (e) => {
                     e.stopPropagation();
                     console.log('Recent location clicked:', location.name);
                     document.getElementById('destination').value = location.name;
@@ -1268,40 +1350,72 @@
             // Initialize icons
             lucide.createIcons();
         }
-        
-        // Add location to recent
-        function addToRecentLocations(location) {
-            // Check if location already exists
-            const existingIndex = recentLocations.findIndex(loc => loc.name === location.name);
+
+        // Add these new functions for swipe functionality
+        function addSwipeToDelete(element) {
+            let startX, moveX, currentTranslate = 0;
+            let isSwiping = false;
             
-            if (existingIndex !== -1) {
-                // Remove existing entry
-                recentLocations.splice(existingIndex, 1);
-            }
+            element.addEventListener('touchstart', (e) => {
+                startX = e.touches[0].clientX;
+                isSwiping = true;
+                e.stopPropagation();
+            }, { passive: true });
             
-            // Add to beginning of array
-            recentLocations.unshift(location);
+            element.addEventListener('touchmove', (e) => {
+                if (!isSwiping) return;
+                
+                moveX = e.touches[0].clientX;
+                const diff = moveX - startX;
+                
+                // Only allow left swipe (negative diff)
+                if (diff < 0 && diff > -70) {
+                    element.querySelector('.recent-location-content').style.transform = `translateX(${diff}px)`;
+                    element.querySelector('.delete-button').style.transform = `translateX(${70 + diff}px)`;
+                }
+                
+                e.stopPropagation();
+            }, { passive: true });
             
-            // Limit to 10 recent locations
-            if (recentLocations.length > 10) {
-                recentLocations.pop();
-            }
-            
-            // Save to localStorage
+            element.addEventListener('touchend', (e) => {
+                if (!isSwiping) return;
+                
+                const diff = moveX - startX;
+                
+                // If swiped more than 35px to the left, show delete button
+                if (diff < -35) {
+                    element.classList.add('swiped');
+                } else {
+                    element.classList.remove('swiped');
+                    element.querySelector('.recent-location-content').style.transform = '';
+                    element.querySelector('.delete-button').style.transform = '';
+                }
+                
+                isSwiping = false;
+                e.stopPropagation();
+            }, { passive: true });
+        }
+
+        function deleteRecentLocation(index) {
+            recentLocations.splice(index, 1);
             localStorage.setItem('recentLocations', JSON.stringify(recentLocations));
-            
-            // Update UI
             populateRecentLocations();
+            showAlert('Location removed from history', 'success');
         }
         
-        // Initialize map
+        // Update the initMap function to ensure the map is fully interactive
         function initMap() {
             map = L.map('map', {
                 zoomControl: false,
                 attributionControl: false,
-                dragging: true, // Ensure dragging is enabled
+                dragging: true,
                 touchZoom: true,
-                scrollWheelZoom: true
+                doubleClickZoom: true,
+                scrollWheelZoom: true,
+                boxZoom: true,
+                tap: true,
+                keyboard: true,
+                inertia: true
             }).setView([14.5995, 120.9842], 15); // Manila coordinates
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1338,6 +1452,11 @@
                     map.setView(userMarker.getLatLng(), 16);
                 }
             });
+            
+            // Add zoom controls
+            L.control.zoom({
+                position: 'bottomright'
+            }).addTo(map);
         }
 
         // Play alarm
@@ -1982,7 +2101,14 @@
             setTimeout(() => {
                 expandBottomSheetPartial();
             }, 2500); // Wait for splash screen to disappear
-}
+        }
+
+        // Add this in the initApp function after other event listeners
+        // Settings icon click
+        document.getElementById('settingsIcon').addEventListener('click', function(e) {
+            e.stopPropagation();
+            openSettings();
+        });
 
         function updateAlarmSound() {
             const audio = document.getElementById('alarmAudio');
