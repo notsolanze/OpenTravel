@@ -443,9 +443,71 @@
             padding: 0 16px;
             margin-bottom: 12px;
         }
-    </style>
+
+    /* Make sure icons are visible */
+    [data-lucide] {
+        display: inline-block !important;
+        visibility: visible !important;
+        fill: none !important;
+        stroke: currentColor !important;
+        stroke-width: 2 !important;
+        stroke-linecap: round !important;
+        stroke-linejoin: round !important;
+    }
+    
+    /* Ensure map container is visible */
+    #map {
+        height: 100vh !important;
+        width: 100% !important;
+        position: absolute !important;
+        top: 0 !important;
+        left: 0 !important;
+        z-index: 1 !important;
+        display: block !important;
+    }
+    
+    /* Improve bottom sheet handle visibility */
+    .bottom-sheet-handle {
+        width: 40px;
+        height: 6px; /* Increased height for better visibility */
+        background-color: #6B7280;
+        border-radius: 3px;
+        margin: 12px auto;
+        cursor: grab;
+        touch-action: none;
+    }
+    
+    .bottom-sheet-handle.active {
+        background-color: #10B981;
+        cursor: grabbing;
+    }
+    
+    /* Ensure bottom sheet is above map but below modals */
+    .bottom-sheet {
+        z-index: 10 !important;
+    }
+</style>
 </head>
 <body class="bg-gray-900 text-white">
+    <script>
+        // Force icons to load
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(function() {
+                if (window.lucide) {
+                    console.log('Forcing Lucide icons to initialize');
+                    lucide.createIcons();
+                } else {
+                    console.error('Lucide not found, loading it manually');
+                    const script = document.createElement('script');
+                    script.src = 'https://unpkg.com/lucide@latest';
+                    script.onload = function() {
+                        lucide.createIcons();
+                    };
+                    document.head.appendChild(script);
+                }
+            }, 1000);
+        });
+    </script>
     <script>
     // Ensure splash screen hides even if there are errors
     window.addEventListener('load', function() {
@@ -882,41 +944,19 @@ function setupBottomSheet() {
     bottomSheet.style.height = snapPoints.partial + 'px';
     
     // Touch events for mobile
-    handle.addEventListener('touchstart', dragStart, { passive: false });
-    document.addEventListener('touchmove', dragMove, { passive: false });
-    document.addEventListener('touchend', dragEnd);
-    
-    // Mouse events for desktop
-    handle.addEventListener('mousedown', dragStart);
-    document.addEventListener('mousemove', dragMove);
-    document.addEventListener('mouseup', dragEnd);
-    
-    function dragStart(e) {
-        console.log('Drag start');
+    handle.addEventListener('touchstart', function(e) {
+        console.log('Touch start on handle');
+        e.preventDefault();
         isDragging = true;
-        
-        // Get current height
+        startY = e.touches[0].clientY;
         startHeight = parseInt(getComputedStyle(bottomSheet).height);
-        
-        // Get start position
-        startY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
-        
-        // Prevent default behavior
-        if (e.cancelable) {
-            e.preventDefault();
-        }
-        
-        // Add active class for visual feedback
         handle.classList.add('active');
-    }
+    }, { passive: false });
     
-    function dragMove(e) {
+    document.addEventListener('touchmove', function(e) {
         if (!isDragging) return;
         
-        // Get current position
-        const currentY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
-        
-        // Calculate new height
+        const currentY = e.touches[0].clientY;
         const deltaY = startY - currentY;
         let newHeight = startHeight + deltaY;
         
@@ -926,18 +966,16 @@ function setupBottomSheet() {
         // Apply new height
         bottomSheet.style.height = newHeight + 'px';
         
+        console.log('Touch move: new height =', newHeight);
+        
         // Prevent default to avoid scrolling
-        if (e.cancelable) {
-            e.preventDefault();
-        }
-        
-        console.log('Dragging: new height =', newHeight);
-    }
+        e.preventDefault();
+    }, { passive: false });
     
-    function dragEnd() {
+    document.addEventListener('touchend', function() {
         if (!isDragging) return;
-        console.log('Drag end');
         
+        console.log('Touch end');
         isDragging = false;
         handle.classList.remove('active');
         
@@ -963,7 +1001,63 @@ function setupBottomSheet() {
         setTimeout(() => {
             bottomSheet.style.transition = '';
         }, 300);
-    }
+    });
+    
+    // Mouse events for desktop
+    handle.addEventListener('mousedown', function(e) {
+        console.log('Mouse down on handle');
+        e.preventDefault();
+        isDragging = true;
+        startY = e.clientY;
+        startHeight = parseInt(getComputedStyle(bottomSheet).height);
+        handle.classList.add('active');
+    });
+    
+    document.addEventListener('mousemove', function(e) {
+        if (!isDragging) return;
+        
+        const deltaY = startY - e.clientY;
+        let newHeight = startHeight + deltaY;
+        
+        // Limit height to snap points range
+        newHeight = Math.max(snapPoints.minimized, Math.min(snapPoints.full, newHeight));
+        
+        // Apply new height
+        bottomSheet.style.height = newHeight + 'px';
+        
+        console.log('Mouse move: new height =', newHeight);
+    });
+    
+    document.addEventListener('mouseup', function() {
+        if (!isDragging) return;
+        
+        console.log('Mouse up');
+        isDragging = false;
+        handle.classList.remove('active');
+        
+        // Get current height
+        const currentHeight = parseInt(getComputedStyle(bottomSheet).height);
+        
+        // Determine which snap point to go to
+        let targetHeight;
+        
+        if (currentHeight < (snapPoints.minimized + snapPoints.partial) / 2) {
+            targetHeight = snapPoints.minimized;
+        } else if (currentHeight < (snapPoints.partial + snapPoints.full) / 2) {
+            targetHeight = snapPoints.partial;
+        } else {
+            targetHeight = snapPoints.full;
+        }
+        
+        // Animate to snap point
+        bottomSheet.style.transition = 'height 0.3s ease';
+        bottomSheet.style.height = targetHeight + 'px';
+        
+        // Reset transition after animation
+        setTimeout(() => {
+            bottomSheet.style.transition = '';
+        }, 300);
+    });
     
     // Open destination modal when search bar is clicked
     searchBar.addEventListener('click', function(e) {
@@ -1145,19 +1239,50 @@ function setupBottomSheet() {
         }
         
         // Initialize map
-        function initMap() {
+function initMap() {
+    try {
+        console.log('Initializing map...');
+        
+        // Make sure the map container has height
+        const mapContainer = document.getElementById('map');
+        if (mapContainer) {
+            // Force the map container to have full height
+            mapContainer.style.height = '100vh';
+            mapContainer.style.width = '100%';
+            mapContainer.style.display = 'block';
+            mapContainer.style.position = 'absolute';
+            mapContainer.style.top = '0';
+            mapContainer.style.left = '0';
+            mapContainer.style.zIndex = '1';
+        } else {
+            console.error('Map container not found!');
+            return;
+        }
+        
+        // Create the map with error handling
+        try {
             map = L.map('map', {
                 zoomControl: false,
                 attributionControl: false,
-                dragging: true, // Ensure dragging is enabled
+                dragging: true,
                 touchZoom: true,
                 scrollWheelZoom: true
             }).setView([14.5995, 120.9842], 15); // Manila coordinates
             
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 19,
-                attribution: '© OpenTravel'
-            }).addTo(map);
+            console.log('Map created successfully');
+            
+            // Add tile layer with error handling
+            try {
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '© OpenTravel'
+                }).addTo(map);
+                
+                console.log('Tile layer added successfully');
+            } catch (tileError) {
+                console.error('Error adding tile layer:', tileError);
+                showAlert('Error loading map tiles. Please check your internet connection.', 'error');
+            }
             
             // If we have a saved destination, show it on the map
             if (appState.isJourneyActive && appState.currentDestination && appState.destinationCoords) {
@@ -1180,7 +1305,21 @@ function setupBottomSheet() {
                 
                 map.fitBounds(circle.getBounds());
             }
+            
+            // Force map to refresh
+            setTimeout(function() {
+                map.invalidateSize();
+                console.log('Map size invalidated');
+            }, 500);
+        } catch (mapError) {
+            console.error('Error creating map:', mapError);
+            showAlert('Error creating map. Please refresh the page.', 'error');
         }
+    } catch (error) {
+        console.error('Error in initMap function:', error);
+        showAlert('Error initializing map. Please refresh the page.', 'error');
+    }
+}
 
         // Play alarm
         function playAlarm() {
@@ -1919,6 +2058,25 @@ getElementById('workAddress').value;
                 });
             }
         });
+    </script>
+    <script>
+        // Force map to initialize after a delay
+        setTimeout(function() {
+            try {
+                if (!map) {
+                    console.log('Map not initialized yet, initializing now...');
+                    initMap();
+                }
+                
+                // Force icons to initialize
+                if (window.lucide) {
+                    console.log('Reinitializing icons...');
+                    lucide.createIcons();
+                }
+            } catch (error) {
+                console.error('Error in delayed initialization:', error);
+            }
+        }, 2000);
     </script>
 </body>
 </html>
