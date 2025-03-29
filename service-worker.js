@@ -164,9 +164,6 @@ self.addEventListener('message', (event) => {
       .then(notifications => {
         notifications.forEach(notification => notification.close());
       });
-  } else if (event.data && event.data.type === 'TEST_NOTIFICATION') {
-    // Send a test notification
-    showTestNotification();
   }
 });
 
@@ -177,23 +174,6 @@ function sendMessageToClients(message) {
       client.postMessage(message);
     });
   });
-}
-
-// Show a test notification
-function showTestNotification() {
-  // First, close any existing notifications with the same tag
-  self.registration.getNotifications({ tag: 'test-notification' })
-    .then(notifications => {
-      notifications.forEach(notification => notification.close());
-      
-      // Then show a simple test notification
-      self.registration.showNotification('OPEN TRAVEL - Test', {
-        body: 'This is a test notification',
-        icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-        badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
-        tag: 'test-notification'
-      });
-    });
 }
 
 // Start journey and show initial notification
@@ -207,7 +187,7 @@ function startJourney() {
       
       // Show the initial notification
       const options = {
-        body: `Your travel to ${journeyData.destinationName} has started!`,
+        body: `Journey to ${journeyData.destinationName} started`,
         icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
         badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
         tag: notificationTag,
@@ -222,7 +202,7 @@ function startJourney() {
       };
       
       // Show the notification
-      self.registration.showNotification('OPEN TRAVEL - Your travel has started!', options)
+      self.registration.showNotification('OpenTravel', options)
         .then(() => {
           // Schedule an update after a short delay to show the progress notification
           setTimeout(() => {
@@ -249,14 +229,20 @@ function updateJourneyProgress(location, currentDistance) {
   const remainingMinutes = Math.ceil(remainingTimeSeconds / 60);
   
   // Format the message based on remaining time
-  let title, message;
+  let message;
   
   if (remainingMinutes <= 1) {
-    title = 'OPEN TRAVEL - Almost there!';
     message = `Almost at ${journeyData.destinationName}`;
   } else {
-    title = `OPEN TRAVEL - ${remainingMinutes} min to destination`;
-    message = `${journeyData.destinationName} - ${Math.round(progress)}% complete`;
+    // Create a simple text-based progress bar (since we can't use HTML/CSS in notifications)
+    const progressBarLength = 20;
+    const filledLength = Math.floor((progress / 100) * progressBarLength);
+    const emptyLength = progressBarLength - filledLength;
+    
+    // Use simple characters for progress bar
+    const progressBar = '●'.repeat(filledLength) + '○'.repeat(emptyLength);
+    
+    message = `${remainingMinutes} min to ${journeyData.destinationName}\n${progressBar}`;
   }
   
   console.log('[Service Worker] Updating journey progress notification');
@@ -285,7 +271,7 @@ function updateJourneyProgress(location, currentDistance) {
       };
       
       // Show the updated notification
-      self.registration.showNotification(title, options);
+      self.registration.showNotification('OpenTravel', options);
     });
 }
 
@@ -301,8 +287,8 @@ function showArrivalNotification() {
       notifications.forEach(notification => notification.close());
       
       // Show arrival notification with a different tag
-      self.registration.showNotification('OPEN TRAVEL - You have reached your destination!', {
-        body: `You have reached ${journeyData.destinationName}!`,
+      self.registration.showNotification('Destination Reached!', {
+        body: `You have arrived at ${journeyData.destinationName}`,
         icon: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
         badge: 'https://cdn-icons-png.flaticon.com/128/10473/10473293.png',
         tag: 'opentravel-arrival', // Different tag for arrival notification
@@ -366,7 +352,7 @@ self.addEventListener('push', (event) => {
       };
       
       event.waitUntil(
-        self.registration.showNotification(data.title || 'OPEN TRAVEL', options)
+        self.registration.showNotification(data.title || 'OpenTravel', options)
       );
     } catch (error) {
       console.error('Error processing push notification:', error);
