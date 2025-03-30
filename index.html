@@ -48,7 +48,7 @@
             background-color: #1F2937;
             border-top-left-radius: 20px;
             border-top-right-radius: 20px;
-            z-index: 900; /* Reduced z-index to be below compass button */
+            z-index: 800; /* Reduced z-index to be below map controls */
             box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
             transition: transform 0.3s ease, height 0.3s ease;
             touch-action: pan-x; /* Only allow horizontal panning */
@@ -176,7 +176,7 @@
         .settings-icon {
             position: fixed;
             top: 16px;
-            left: 20px;
+            right: 16px;
             width: 40px;
             height: 40px;
             background-color: rgba(31, 41, 55, 0.8);
@@ -214,7 +214,7 @@
             left: 50%;
             transform: translateX(-50%);
             width: 90%;
-            max-width: 380px;
+            max-width: 350px;
             background-color: rgba(17, 24, 39, 0.9);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
@@ -383,7 +383,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 1000; /* Increased z-index to be above bottom sheet */
+            z-index: 950; /* Increased z-index to be above bottom sheet */
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             cursor: pointer;
         }
@@ -518,7 +518,7 @@
             left: 0;
             right: 0;
             bottom: 0;
-            z-index: 899; /* Just below the sheet */
+            z-index: 799; /* Just below the sheet */
             display: none; /* Hidden by default */
         }
         .bottom-sheet-overlay.active {
@@ -592,6 +592,24 @@
             color: white;
             margin-left: 12px;
             flex-shrink: 0;
+        }
+        
+        /* Ensure map controls are above the bottom sheet */
+        .leaflet-control-container {
+            z-index: 1000 !important;
+            pointer-events: auto !important;
+        }
+
+        .leaflet-control-zoom {
+            z-index: 1000 !important;
+            pointer-events: auto !important;
+        }
+        
+        /* Ensure map is interactive */
+        #map {
+            z-index: 500;
+            touch-action: manipulation;
+            pointer-events: auto !important;
         }
         
         /* Fix for Lucide icons */
@@ -1474,22 +1492,40 @@
                 }
             });
             
-            // Add zoom controls
-            L.control.zoom({
+            // Add zoom controls with higher z-index
+            const zoomControl = L.control.zoom({
                 position: 'bottomright'
-            }).addTo(map);
+            });
+            zoomControl.addTo(map);
+            
+            // Ensure zoom controls are above bottom sheet
+            const zoomControlContainer = document.querySelector('.leaflet-control-zoom');
+            if (zoomControlContainer) {
+                zoomControlContainer.style.zIndex = '1000';
+            }
             
             // Make sure map is interactive
             map.getContainer().style.cursor = 'grab';
+            map.getContainer().style.touchAction = 'manipulation';
+            map.getContainer().style.pointerEvents = 'auto';
             
             // Add event listeners for better touch interaction
-            map.getContainer().addEventListener('touchstart', function() {
+            map.getContainer().addEventListener('touchstart', function(e) {
                 map.getContainer().style.cursor = 'grabbing';
             });
             
             map.getContainer().addEventListener('touchend', function() {
                 map.getContainer().style.cursor = 'grab';
             });
+            
+            // Prevent bottom sheet from interfering with map interactions
+            map.getContainer().addEventListener('click', function(e) {
+                e.stopPropagation();
+            });
+            
+            map.getContainer().addEventListener('touchmove', function(e) {
+                e.stopPropagation();
+            }, { passive: true });
         }
 
         // Play alarm
@@ -2255,11 +2291,7 @@
     </script>
     
     <script>
-        // Add this at the end of the DOMContentLoaded event handler
-        // Ensure map container has proper pointer events
-        document.getElementById('map').style.pointerEvents = 'auto';
-        
-        // Fix for touch events on mobile
+        // Fix for map interactivity
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize Lucide icons
             initIcons();
@@ -2273,18 +2305,31 @@
                 });
             });
             
-            // Debug logging for search bar clicks
-            const searchBar = document.getElementById('searchBar');
-            if (searchBar) {
-                searchBar.addEventListener('touchstart', function(e) {
-                    console.log('Search bar touched!');
-                    e.stopPropagation();
-                });
+            // Ensure map container has proper pointer events
+            const mapContainer = document.getElementById('map');
+            if (mapContainer) {
+                mapContainer.style.pointerEvents = 'auto';
+                mapContainer.style.touchAction = 'manipulation';
                 
-                searchBar.addEventListener('mousedown', function(e) {
-                    console.log('Search bar mouse down!');
+                // Prevent bottom sheet from capturing map events
+                mapContainer.addEventListener('touchmove', function(e) {
+                    e.stopPropagation();
+                }, { passive: true });
+                
+                mapContainer.addEventListener('click', function(e) {
                     e.stopPropagation();
                 });
+            }
+            
+            // Ensure bottom sheet doesn't interfere with map
+            const bottomSheet = document.getElementById('bottomSheet');
+            if (bottomSheet) {
+                bottomSheet.addEventListener('touchmove', function(e) {
+                    // Only allow touch events on the bottom sheet itself
+                    if (e.target !== bottomSheet && !bottomSheet.contains(e.target)) {
+                        e.stopPropagation();
+                    }
+                }, { passive: true });
             }
         });
     </script>
