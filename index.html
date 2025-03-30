@@ -605,6 +605,28 @@
             border-radius: 12px;
             backdrop-filter: blur(4px);
         }
+        
+        /* Audio enable button */
+        #enableAudioButton {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background-color: #10B981;
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        #enableAudioButton:hover {
+            background-color: #059669;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -845,10 +867,17 @@
         </div>
     </div>
     
-    <audio id="alarmAudio" loop>
+    <!-- Audio element with mobile-friendly attributes -->
+    <audio id="alarmAudio" loop preload="auto" playsinline>
         <source src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3" type="audio/mpeg">
+        <source src="https://assets.mixkit.co/active_storage/sfx/2574/2574-preview.mp3" type="audio/mpeg">
         Your browser does not support the audio element.
     </audio>
+    
+    <!-- Enable Audio Button -->
+    <button id="enableAudioButton" class="hidden">
+        <i data-lucide="volume-2" class="w-6 h-6"></i>
+    </button>
     
     <div id="alertPopup" class="fixed top-16 left-1/2 transform -translate-x-1/2 bg-gray-800 rounded-lg shadow-lg p-4 transition-all duration-300 ease-in-out opacity-0 -translate-y-full max-w-sm w-full mx-4 border border-gray-700">
         <div class="flex items-center gap-3">
@@ -880,6 +909,7 @@
         let isLiveActivityMinimized = false;
         let recentLocations = [];
         let bottomSheetHeight = 'partial'; // 'partial', 'full', 'minimized'
+        let audioInitialized = false;
         
         // App state
         let appState = {
@@ -1006,6 +1036,9 @@
             // Initialize the app
             initApp();
             
+            // Initialize audio for mobile
+            initAudio();
+            
             // Set up Live Activity minimize/maximize functionality
             setupLiveActivityControls();
             
@@ -1052,6 +1085,61 @@
                 }, 500);
             }
         }, 5000); // Force hide after 5 seconds if not already hidden
+        
+        // Initialize audio for mobile devices
+        function initAudio() {
+            // Set up audio context on first user interaction
+            const setupAudio = function() {
+                const audio = document.getElementById('alarmAudio');
+                
+                // Create audio context
+                if (!audioContext) {
+                    try {
+                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        console.log('Audio context created');
+                    } catch (e) {
+                        console.error('Failed to create audio context:', e);
+                    }
+                }
+                
+                // Load and play a silent sound to unlock audio
+                audio.volume = 0;
+                audio.play().then(() => {
+                    audio.pause();
+                    audio.currentTime = 0;
+                    audio.volume = settings.volume;
+                    console.log('Audio initialized successfully');
+                    audioInitialized = true;
+                    
+                    // Hide the enable audio button if it's visible
+                    document.getElementById('enableAudioButton').classList.add('hidden');
+                }).catch(error => {
+                    console.error('Audio initialization failed:', error);
+                    // Show the enable audio button
+                    document.getElementById('enableAudioButton').classList.remove('hidden');
+                });
+                
+                // Remove event listeners once audio is initialized
+                document.removeEventListener('touchstart', setupAudio);
+                document.removeEventListener('click', setupAudio);
+            };
+            
+            // Set up event listeners for user interaction
+            document.addEventListener('touchstart', setupAudio, { once: true });
+            document.addEventListener('click', setupAudio, { once: true });
+            
+            // Add event listener to the enable audio button
+            document.getElementById('enableAudioButton').addEventListener('click', function() {
+                setupAudio();
+            });
+            
+            // Show the button after a delay if audio might be blocked
+            setTimeout(() => {
+                if (!audioInitialized) {
+                    document.getElementById('enableAudioButton').classList.remove('hidden');
+                }
+            }, 5000);
+        }
         
         // Update clock in status bar
         function updateClock() {
@@ -1243,6 +1331,101 @@
             overlay.classList.add('active');
         }
 
+        // Function to update user location
+        function updateLocation(position) {
+            const { latitude, longitude, accuracy } = position.coords;
+            
+            // Update user marker on map
+            if (userMarker) {
+                map.removeLayer(userMarker);
+            }
+            
+            userMarker = L.marker([latitude, longitude], {
+                icon: L.divIcon({
+                    className: 'bg-blue-500 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center',
+                    html: '<span class="text-white text-xs">📍</span>',
+                    iconSize: [24, 24]
+                })
+            }).addTo(map);
+            
+            // If this is the first location update, center the map
+            if (!map.hasUserLocation) {
+                map.setView([latitude, longitude], 16);
+                map.hasUserLocation = true;
+            }
+            
+            // If we have an active destination, check distance
+            if (destination && isAlarmActive) {
+                const distance = calculateDistance(
+                    { latitude, longitude },
+                    { latitude: destination[0], longitude: destination[1] }
+                );
+                
+                // Update distance badge
+                document.getElementById('distance').textContent = formatDistance(distance);
+                
+                // Update live activity if visible
+                if (document.getElementById('liveActivity').classList.contains('hidden') === false) {
+                    updateLiveActivity(distance);
+                }
+                
+                // Check if we've reached the destination
+                if (distance <= alarmRadius) {
+                    if (!isAlarmPlaying) {
+                        playAlarm();
+                        document.getElementById('status').textContent = 'You have reached your destination!';
+                        document.getElementById('status').classList.add('text-green-500', 'font-semibold');
+                        
+                        // Show notification
+                        if (settings.enableNotifications && 'Notification' in window && Notification.permission === 'granted') {
+                            const notification = new Notification('Destination Reached!', {
+                                body: `You have arrived at ${appState.currentDestination}`,
+                                icon: '/3dicons-map-pin-dynamic-clay.png'
+                            });
+                            
+                            notification.onclick = function() {
+                                window.focus();
+                                this.close();
+                            };
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Function to show live activity
+        function showLiveActivity() {
+            const liveActivity = document.getElementById('liveActivity');
+            liveActivity.classList.remove('hidden');
+            
+            // Set destination name
+            document.getElementById('liveActivitySubtitle').textContent = appState.currentDestination;
+        }
+        
+        // Function to hide live activity
+        function hideLiveActivity() {
+            const liveActivity = document.getElementById('liveActivity');
+            liveActivity.classList.add('hidden');
+        }
+        
+        // Function to update live activity
+        function updateLiveActivity(distance) {
+            // Calculate progress percentage (inverse of distance/initialDistance)
+            const progressPercent = Math.max(0, Math.min(100, 100 - (distance / initialDistance * 100)));
+            
+            // Update progress bar
+            document.getElementById('liveActivityProgress').style.width = `${progressPercent}%`;
+            document.getElementById('liveActivityDot').style.left = `${progressPercent}%`;
+            
+            // Calculate ETA
+            const speed = 5; // meters per second (walking speed)
+            const remainingTimeSeconds = distance / speed;
+            const remainingMinutes = Math.ceil(remainingTimeSeconds / 60);
+            
+            // Update title
+            document.getElementById('liveActivityTitle').textContent = `${remainingMinutes} min to destination`;
+        }
+        
         // Replace the setupDestinationAutocomplete function with this:
         function updateDestinationDisplay() {
             const noDestination = document.querySelector('.no-destination');
@@ -1492,32 +1675,62 @@
             });
         }
 
-        // Modify the playAlarm function to use Web Audio API and request wake lock
+        // Improved playAlarm function for better mobile support
         function playAlarm() {
             if (!isAlarmPlaying) {
                 try {
-                    // Create audio context if it doesn't exist
-                    if (!audioContext) {
-                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                    }
-                    
                     const audio = document.getElementById('alarmAudio');
+                    
+                    // Reset the audio element
+                    audio.pause();
+                    audio.currentTime = 0;
                     audio.volume = settings.volume;
                     
-                    // Play using both standard audio element and Web Audio API for redundancy
-                    audio.play();
+                    // For iOS, we need to load the audio first
+                    audio.load();
                     
-                    // Also create an audio source from the audio element
-                    if (audioContext.state === 'suspended') {
-                        audioContext.resume();
+                    // Try to play immediately with user interaction
+                    const playPromise = audio.play();
+                    
+                    if (playPromise !== undefined) {
+                        playPromise.then(() => {
+                            console.log('Audio playback started successfully');
+                            isAlarmPlaying = true;
+                            
+                            // Create audio context after successful play
+                            if (!audioContext) {
+                                try {
+                                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                                } catch (e) {
+                                    console.error('Failed to create audio context:', e);
+                                }
+                            }
+                            
+                            if (audioContext && audioContext.state === 'suspended') {
+                                audioContext.resume();
+                            }
+                            
+                            // Show the enable audio button if audio context failed
+                            if (!audioContext) {
+                                document.getElementById('enableAudioButton').classList.remove('hidden');
+                            }
+                        }).catch(error => {
+                            console.error('Audio playback failed:', error);
+                            
+                            // Show the enable audio button
+                            document.getElementById('enableAudioButton').classList.remove('hidden');
+                            
+                            // Try again with a user interaction
+                            document.addEventListener('touchend', function audioTouchHandler() {
+                                audio.play().catch(e => console.error('Second play attempt failed:', e));
+                                document.removeEventListener('touchend', audioTouchHandler);
+                            }, { once: true });
+                            
+                            // Show alert to user
+                            showAlert('Please tap the screen to enable alarm sound', 'info');
+                        });
                     }
                     
-                    if (!audioSource) {
-                        audioSource = audioContext.createMediaElementSource(audio);
-                        audioSource.connect(audioContext.destination);
-                    }
-                    
-                    isAlarmPlaying = true;
                     console.log('Playing alarm sound');
                     
                     document.getElementById('stopAlarm').classList.remove('hidden');
@@ -1558,12 +1771,15 @@
                     // Store alarm state in localStorage
                     localStorage.setItem('alarmPlaying', 'true');
                     localStorage.setItem('alarmStartTime', Date.now().toString());
+                    
+                    isAlarmPlaying = true;
                 } catch (error) {
                     console.error('Error starting alarm:', error);
-                    // Fallback to standard audio
-                    const audio = document.getElementById('alarmAudio');
-                    audio.volume = settings.volume;
-                    audio.play();
+                    // Show an alert to the user
+                    showAlert('Error playing alarm sound. Please tap the screen to enable audio.', 'error');
+                    
+                    // Show the enable audio button
+                    document.getElementById('enableAudioButton').classList.remove('hidden');
                 }
             }
         }
@@ -1866,101 +2082,6 @@
                 }
             );
         }
-
-           // Function to update user location
-    function updateLocation(position) {
-        const { latitude, longitude, accuracy } = position.coords;
-        
-        // Update user marker on map
-        if (userMarker) {
-            map.removeLayer(userMarker);
-        }
-        
-        userMarker = L.marker([latitude, longitude], {
-            icon: L.divIcon({
-                className: 'bg-blue-500 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center',
-                html: '<span class="text-white text-xs">📍</span>',
-                iconSize: [24, 24]
-            })
-        }).addTo(map);
-        
-        // If this is the first location update, center the map
-        if (!map.hasUserLocation) {
-            map.setView([latitude, longitude], 16);
-            map.hasUserLocation = true;
-        }
-        
-        // If we have an active destination, check distance
-        if (destination && isAlarmActive) {
-            const distance = calculateDistance(
-                { latitude, longitude },
-                { latitude: destination[0], longitude: destination[1] }
-            );
-            
-            // Update distance badge
-            document.getElementById('distance').textContent = formatDistance(distance);
-            
-            // Update live activity if visible
-            if (document.getElementById('liveActivity').classList.contains('hidden') === false) {
-                updateLiveActivity(distance);
-            }
-            
-            // Check if we've reached the destination
-            if (distance <= alarmRadius) {
-                if (!isAlarmPlaying) {
-                    playAlarm();
-                    document.getElementById('status').textContent = 'You have reached your destination!';
-                    document.getElementById('status').classList.add('text-green-500', 'font-semibold');
-                    
-                    // Show notification
-                    if (settings.enableNotifications && 'Notification' in window && Notification.permission === 'granted') {
-                        const notification = new Notification('Destination Reached!', {
-                            body: `You have arrived at ${appState.currentDestination}`,
-                            icon: '/3dicons-map-pin-dynamic-clay.png'
-                        });
-                        
-                        notification.onclick = function() {
-                            window.focus();
-                            this.close();
-                        };
-                    }
-                }
-            }
-        }
-    }
-    
-    // Function to show live activity
-    function showLiveActivity() {
-        const liveActivity = document.getElementById('liveActivity');
-        liveActivity.classList.remove('hidden');
-        
-        // Set destination name
-        document.getElementById('liveActivitySubtitle').textContent = appState.currentDestination;
-    }
-    
-    // Function to hide live activity
-    function hideLiveActivity() {
-        const liveActivity = document.getElementById('liveActivity');
-        liveActivity.classList.add('hidden');
-    }
-    
-    // Function to update live activity
-    function updateLiveActivity(distance) {
-        // Calculate progress percentage (inverse of distance/initialDistance)
-        const progressPercent = Math.max(0, Math.min(100, 100 - (distance / initialDistance * 100)));
-        
-        // Update progress bar
-        document.getElementById('liveActivityProgress').style.width = `${progressPercent}%`;
-        document.getElementById('liveActivityDot').style.left = `${progressPercent}%`;
-        
-        // Calculate ETA
-        const speed = 5; // meters per second (walking speed)
-        const remainingTimeSeconds = distance / speed;
-        const remainingMinutes = Math.ceil(remainingTimeSeconds / 60);
-        
-        // Update title
-        document.getElementById('liveActivityTitle').textContent = `${remainingMinutes} min to destination`;
-    }
 
         // Calculate distance between two points
         function calculateDistance(point1, point2) {
@@ -2280,6 +2401,9 @@
                     audio.src = 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3';
             }
             audio.volume = settings.volume;
+            
+            // Preload the audio
+            audio.load();
         }
 
         function showAlert(message, type = 'error') {
@@ -2415,21 +2539,6 @@
                 });
             }
         });
-    </script>
-    <!-- Fix for the syntax error in the registerPeriodicSync function -->
-    <script>
-        // Fix the syntax error in the registerPeriodicSync function
-        function registerPeriodicSync() {
-            if ('periodicSync' in navigator.serviceWorker) {
-                navigator.serviceWorker.ready.then(registration => {
-                    registration.periodicSync.register('alarm-periodic-sync', {
-                        minInterval: 60000 // Minimum interval is 1 minute
-                    }).catch(error => {
-                        console.error('Periodic Sync could not be registered:', error);
-                    });
-                });
-            }
-        }
     </script>
 </body>
 </html>
