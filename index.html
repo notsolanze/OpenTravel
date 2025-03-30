@@ -976,6 +976,11 @@
         
         // Handle splash screen
         document.addEventListener('DOMContentLoaded', () => {
+            // Ensure recentLocations is initialized
+            if (!recentLocations) {
+                recentLocations = [];
+            }
+            
             // Show splash screen for 2 seconds
             setTimeout(() => {
                 const splashScreen = document.getElementById('splashScreen');
@@ -1289,7 +1294,9 @@
             const recentLocationsContainer = document.getElementById('recentLocations');
             recentLocationsContainer.innerHTML = '';
             
-            if (recentLocations.length === 0) {
+            console.log('Populating recent locations, count:', recentLocations.length);
+            
+            if (!recentLocations || recentLocations.length === 0) {
                 recentLocationsContainer.innerHTML = '<p class="text-gray-500 text-center py-4">No recent locations</p>';
                 return;
             }
@@ -1307,21 +1314,21 @@
                 contentContainer.className = 'recent-location-content';
                 
                 contentContainer.innerHTML = `
-                    <div class="recent-location-icon">
-                        <i data-lucide="history" class="w-5 h-5"></i>
-                    </div>
-                    <div class="flex-1">
-                        <div class="font-medium">${location.name}</div>
-                        <div class="text-sm text-gray-400">${location.address || ''}</div>
-                    </div>
-                `;
+            <div class="recent-location-icon">
+                <i data-lucide="history" class="w-5 h-5"></i>
+            </div>
+            <div class="flex-1">
+                <div class="font-medium">${location.name}</div>
+                <div class="text-sm text-gray-400">${location.address || ''}</div>
+            </div>
+        `;
                 
                 // Create delete button
                 const deleteButton = document.createElement('div');
                 deleteButton.className = 'delete-button';
                 deleteButton.innerHTML = `
-                    <i data-lucide="trash-2" class="w-5 h-5"></i>
-                `;
+            <i data-lucide="trash-2" class="w-5 h-5"></i>
+        `;
                 
                 // Add event listener to delete button
                 deleteButton.addEventListener('click', (e) => {
@@ -1397,6 +1404,7 @@
         }
 
         function deleteRecentLocation(index) {
+            console.log('Deleting location at index:', index);
             recentLocations.splice(index, 1);
             localStorage.setItem('recentLocations', JSON.stringify(recentLocations));
             populateRecentLocations();
@@ -1687,6 +1695,15 @@
             if (isResume && appState.destinationCoords) {
                 destination = appState.destinationCoords;
                 setupJourney(destination, destinationInput);
+                
+                // Add to recent locations even when resuming
+                if (appState.currentDestination) {
+                    addToRecentLocations({
+                        name: appState.currentDestination,
+                        address: 'Resumed journey',
+                        coords: appState.destinationCoords
+                    });
+                }
                 return;
             }
             
@@ -1703,6 +1720,8 @@
                             address: data[0].display_name,
                             coords: destination
                         });
+                        
+                        console.log('Added to history:', destinationInput);
                     } else {
                         showAlert('Destination not found in the Philippines. Please try a different location.', 'error');
                     }
@@ -2184,6 +2203,34 @@
             alertPopup.classList.add('opacity-0', '-translate-y-full');
             alertPopup.classList.remove('border-l-4', 'border-green-500', 'border-red-500', 'border-blue-500');
             document.getElementById('alertIcon').classList.remove('bg-green-900', 'bg-red-900', 'bg-blue-900');
+        }
+
+        // Add location to recent
+        function addToRecentLocations(location) {
+            // Check if location already exists
+            const existingIndex = recentLocations.findIndex(loc => loc.name === location.name);
+            
+            if (existingIndex !== -1) {
+                // Remove existing entry
+                recentLocations.splice(existingIndex, 1);
+            }
+            
+            // Add to beginning of array
+            recentLocations.unshift(location);
+            
+            // Limit to 10 recent locations
+            if (recentLocations.length > 10) {
+                recentLocations.pop();
+            }
+            
+            // Save to localStorage
+            localStorage.setItem('recentLocations', JSON.stringify(recentLocations));
+            
+            // Update UI
+            populateRecentLocations();
+            
+            console.log('Added to recent locations:', location.name);
+            console.log('Recent locations count:', recentLocations.length);
         }
     </script>
     
