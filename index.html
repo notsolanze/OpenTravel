@@ -68,9 +68,10 @@
             z-index: 900; /* Reduced z-index to be below compass button */
             box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
             transition: transform 0.3s ease, height 0.3s ease;
-            touch-action: pan-x; /* Only allow horizontal panning */
+            touch-action: none; /* Change from pan-x to none */
             overflow-y: auto; /* Allow scrolling of content */
             max-height: 90vh; /* Prevent sheet from covering entire screen */
+            pointer-events: auto; /* Ensure it captures its own events */
         }
         .bottom-sheet-handle {
             width: 60px;
@@ -603,6 +604,17 @@
             color: white;
             margin-left: 12px;
             flex-shrink: 0;
+        }
+
+        #map {
+            z-index: 1; /* Ensure map has a z-index */
+            touch-action: auto; /* Allow all touch actions on map */
+            position: relative; /* Ensure z-index works */
+        }
+
+        /* Modify the bottom sheet content to use pointer-events: auto explicitly */
+        .bottom-sheet > * {
+            pointer-events: auto;
         }
     </style>
 </head>
@@ -2120,6 +2132,22 @@
             setTimeout(() => {
                 expandBottomSheetPartial();
             }, 2500); // Wait for splash screen to disappear
+
+            // Make the map always interactive
+            const mapElement = document.getElementById('map');
+            mapElement.style.touchAction = 'auto';
+            mapElement.style.pointerEvents = 'auto';
+
+            // Ensure bottom sheet only captures events on its actual content
+            const bottomSheet = document.getElementById('bottomSheet');
+            bottomSheet.addEventListener('touchstart', function(e) {
+                // If the touch is directly on the bottom sheet background (not on a child element),
+                // let it pass through to the map
+                if (e.target === bottomSheet) {
+                    e.stopPropagation();
+                    return false;
+                }
+            });
         }
 
         // Add this in the initApp function after other event listeners
