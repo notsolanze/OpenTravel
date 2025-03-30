@@ -864,6 +864,11 @@
     </div>
 
     <script>
+        // Add these variables at the top with the other declarations
+        let audioContext = null;
+        let audioSource = null;
+        let wakeLock = null;
+        
         let map, userMarker, destinationMarker, circle;
         let watchId, destination, alarmRadius;
         let isAlarmPlaying = false;
@@ -1016,6 +1021,24 @@
             
             // Populate recent locations
             populateRecentLocations();
+
+            // Check if alarm was playing when the app was closed/minimized
+            const wasAlarmPlaying = localStorage.getItem('alarmPlaying') === 'true';
+            if (wasAlarmPlaying) {
+                const alarmStartTime = parseInt(localStorage.getItem('alarmStartTime') || '0');
+                const currentTime = Date.now();
+                const alarmDuration = currentTime - alarmStartTime;
+                
+                // If the alarm has been playing for less than 30 minutes, resume it
+                if (alarmDuration < 30 * 60 * 1000) {
+                    console.log('Resuming alarm that was playing when app was closed');
+                    playAlarm();
+                } else {
+                    // If it's been too long, clear the alarm state
+                    localStorage.removeItem('alarmPlaying');
+                    localStorage.removeItem('alarmStartTime');
+                }
+            }
         });
         
         // Update clock in status bar
@@ -1457,32 +1480,95 @@
             });
         }
 
-        // Play alarm
+        // Modify the playAlarm function to use Web Audio API and request wake lock
         function playAlarm() {
             if (!isAlarmPlaying) {
-                const audio = document.getElementById('alarmAudio');
-                audio.volume = settings.volume;
-                audio.play();
-                isAlarmPlaying = true;
-                console.log('Playing alarm sound');
-                
-                document.getElementById('stopAlarm').classList.remove('hidden');
-                document.getElementById('setAlarm').classList.add('hidden');
-                
-                // Vibrate if supported
-                if ('vibrate' in navigator) {
-                    navigator.vibrate([200, 100, 200]);
+                try {
+                    // Create audio context if it doesn't exist
+                    if (!audioContext) {
+                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    
+                    const audio = document.getElementById('alarmAudio');
+                    audio.volume = settings.volume;
+                    
+                    // Play using both standard audio element and Web Audio API for redundancy
+                    audio.play();
+                    
+                    // Also create an audio source from the audio element
+                    if (audioContext.state === 'suspended') {
+                        audioContext.resume();
+                    }
+                    
+                    if (!audioSource) {
+                        audioSource = audioContext.createMediaElementSource(audio);
+                        audioSource.connect(audioContext.destination);
+                    }
+                    
+                    isAlarmPlaying = true;
+                    console.log('Playing alarm sound');
+                    
+                    document.getElementById('stopAlarm').classList.remove('hidden');
+                    document.getElementById('setAlarm').classList.add('hidden');
+                    
+                    // Vibrate if supported
+                    if ('vibrate' in navigator) {
+                        // Vibrate continuously (pattern repeats)
+                        const vibrateInterval = setInterval(() => {
+                            navigator.vibrate([200, 100, 200]);
+                        }, 1000);
+                        
+                        // Store the interval ID to clear it later
+                        window.localStorage.setItem('vibrateInterval', vibrateInterval);
+                    }
+                    
+                    // Request wake lock to prevent device from sleeping
+                    requestWakeLock();
+                    
+                    // Register a periodic sync if supported
+                    registerPeriodicSync();
+                    
+                    // Use service worker to show a persistent notification
+                    if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+                        serviceWorkerRegistration.active.postMessage({
+                            type: 'SHOW_ALARM_NOTIFICATION',
+                            destination: appState.currentDestination || 'your destination'
+                        });
+                    }
+                    
+                    // Set up a background sync task
+                    if ('sync' in navigator.serviceWorker) {
+                        navigator.serviceWorker.ready.then(registration => {
+                            registration.sync.register('alarm-sync');
+                        });
+                    }
+                    
+                    // Store alarm state in localStorage
+                    localStorage.setItem('alarmPlaying', 'true');
+                    localStorage.setItem('alarmStartTime', Date.now().toString());
+                } catch (error) {
+                    console.error('Error starting alarm:', error);
+                    // Fallback to standard audio
+                    const audio = document.getElementById('alarmAudio');
+                    audio.volume = settings.volume;
+                    audio.play();
                 }
             }
         }
 
-        // Stop alarm
+        // Modify the stopAlarm function to clean up resources
         function stopAlarm() {
             const audio = document.getElementById('alarmAudio');
             audio.pause();
             audio.currentTime = 0;
             isAlarmPlaying = false;
             isAlarmActive = false;
+            
+            // Clean up audio context
+            if (audioContext && audioContext.state === 'running') {
+                audioContext.suspend();
+            }
+            
             document.getElementById('stopAlarm').classList.add('hidden');
             document.getElementById('setAlarm').classList.remove('hidden');
             showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
@@ -1502,6 +1588,20 @@
                 clearInterval(backgroundInterval);
             }
             
+            // Clear vibration interval
+            const vibrateInterval = parseInt(window.localStorage.getItem('vibrateInterval'));
+            if (vibrateInterval) {
+                clearInterval(vibrateInterval);
+                window.localStorage.removeItem('vibrateInterval');
+            }
+            
+            // Release wake lock
+            releaseWakeLock();
+            
+            // Clear alarm state in localStorage
+            localStorage.removeItem('alarmPlaying');
+            localStorage.removeItem('alarmStartTime');
+            
             // Clear journey state
             appState.isJourneyActive = false;
             localStorage.setItem('journeyState', JSON.stringify(appState));
@@ -1512,126 +1612,46 @@
             // Close destination modal
             document.getElementById('destinationModal').classList.add('hidden');
         }
-
-        // Update user location
-        function updateLocation(position) {
-            const { latitude, longitude } = position.coords;
-            
-            if (!userMarker) {
-                userMarker = L.marker([latitude, longitude], {
-                    icon: L.icon({
-                        iconUrl: 'https://cdn-icons-png.flaticon.com/128/10740/10740579.png',
-                        iconSize: [30, 30],
-                        iconAnchor: [15, 15]
-                    })
-                }).addTo(map);
-                map.setView([latitude, longitude], 16);
-            } else {
-                userMarker.setLatLng([latitude, longitude]);
-            }
-
-            if (destination && isAlarmActive) {
-                const distance = map.distance([latitude, longitude], destination);
-                
-                // Update distance display
-                updateDistanceDisplay(distance);
-                
-                // Update live activity
-                updateLiveActivity(distance);
-                
-                // Send location update to service worker
-                if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
-                    serviceWorkerRegistration.active.postMessage({
-                        type: 'UPDATE_LOCATION',
-                        location: { latitude, longitude },
-                        distance: distance
-                    });
-                } else {
-                    console.log('Service worker not ready for location update');
-                }
-                
-                // Check if we've reached the destination
-                if (distance <= alarmRadius && !isAlarmPlaying) {
-                    playAlarm();
-                    document.getElementById('status').textContent = 'You have reached your destination!';
-                    document.getElementById('status').classList.add('text-green-500', 'font-semibold');
+        
+        // Add these new functions to handle wake lock
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Wake Lock is active');
                     
-                    // Clear journey state
-                    appState.isJourneyActive = false;
-                    localStorage.setItem('journeyState', JSON.stringify(appState));
+                    wakeLock.addEventListener('release', () => {
+                        console.log('Wake Lock was released');
+                    });
+                } catch (err) {
+                    console.error(`Failed to get wake lock: ${err.name}, ${err.message}`);
                 }
-            }
-        }
-
-        // Calculate progress percentage
-        function calculateProgress(currentDistance) {
-            return Math.max(0, Math.min(100, ((initialDistance - currentDistance) / initialDistance) * 100));
-        }
-
-        // Update distance display
-        function updateDistanceDisplay(distance) {
-            const distanceText = `Distance: ${formatNumber(Math.round(distance))} meters`;
-            document.getElementById('distance').textContent = distanceText;
-        }
-
-        // Format number with commas
-        function formatNumber(num) {
-            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-        }
-
-        // Show live activity
-        function showLiveActivity() {
-            const liveActivity = document.getElementById('liveActivity');
-            liveActivity.classList.remove('hidden');
-            
-            // If it was previously minimized, keep it minimized
-            if (isLiveActivityMinimized) {
-                liveActivity.classList.add('minimized');
             } else {
-                liveActivity.classList.remove('minimized');
+                console.warn('Wake Lock API not supported');
             }
         }
-
-        // Hide live activity
-        function hideLiveActivity() {
-            const liveActivity = document.getElementById('liveActivity');
-            liveActivity.classList.add('hidden');
-        }
-
-        // Update live activity
-        function updateLiveActivity(currentDistance) {
-            if (!initialDistance) return;
-            
-            const progress = calculateProgress(currentDistance);
-            const progressBar = document.getElementById('liveActivityProgress');
-            const progressDot = document.getElementById('liveActivityDot');
-            const title = document.getElementById('liveActivityTitle');
-            const subtitle = document.getElementById('liveActivitySubtitle');
-            
-            // Update progress bar width
-            progressBar.style.width = `${progress}%`;
-            
-            // Update dot position
-            const dotPosition = Math.min(98, progress);
-            progressDot.style.left = `${dotPosition}%`;
-            
-            // Calculate remaining time
-            const speed = 5; // meters per second (walking speed)
-            const remainingTimeSeconds = currentDistance / speed;
-            const remainingMinutes = Math.ceil(remainingTimeSeconds / 60);
-            
-            // Update text
-            if (remainingMinutes <= 1) {
-                title.textContent = `Almost there!`;
-            } else {
-                title.textContent = `${remainingMinutes} min to destination`;
+        
+        function releaseWakeLock() {
+            if (wakeLock !== null) {
+                wakeLock.release()
+                    .then(() => {
+                        wakeLock = null;
+                        console.log('Wake Lock released');
+                    });
             }
-            
-            // Update subtitle with destination name
-            subtitle.textContent = appState.currentDestination || 'Destination';
-            
-            // Show the live activity if it's hidden
-            showLiveActivity();
+        }
+        
+        // Add function to register periodic sync
+        function registerPeriodicSync() {
+            if ('periodicSync' in navigator.serviceWorker') {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.periodicSync.register('alarm-periodic-sync', {
+                        minInterval: 60000 // Minimum interval is 1 minute
+                    }).catch(error => {
+                        console.error('Periodic Sync could not be registered:', error);
+                    });
+                });
+            }
         }
 
         // Set alarm
@@ -2086,6 +2106,16 @@
             navigator.serviceWorker.addEventListener('message', (event) => {
                 console.log('[Main] Message received from service worker:', event.data);
                 
+                if (event.data && event.data.type === 'STOP_ALARM_FROM_NOTIFICATION') {
+                    stopAlarm();
+                    showAlert('Alarm stopped from notification', 'info');
+                } else if (event.data && event.data.type === 'CHECK_ALARM_STATUS') {
+                    // If alarm should be playing but isn't, restart it
+                    if (localStorage.getItem('alarmPlaying') === 'true' && !isAlarmPlaying) {
+                        playAlarm();
+                    }
+                }
+                
                 if (event.data && event.data.type === 'JOURNEY_CANCELED') {
                     stopAlarm();
                     showAlert('Journey canceled', 'info');
@@ -2215,6 +2245,37 @@
             console.log('Added to recent locations:', location.name);
             console.log('Recent locations count:', recentLocations.length);
         }
+
+        // Add visibility change handler to detect when app is minimized/restored
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                // App is being minimized or screen locked
+                console.log('App minimized or screen locked');
+                
+                // If alarm is playing, make sure it continues in the background
+                if (isAlarmPlaying) {
+                    // Use service worker to ensure alarm continues
+                    if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+                        serviceWorkerRegistration.active.postMessage({
+                            type: 'CONTINUE_ALARM_IN_BACKGROUND'
+                        });
+                    }
+                }
+            } else if (document.visibilityState === 'visible') {
+                // App is being restored
+                console.log('App restored from background');
+                
+                // Check if alarm should be playing
+                if (localStorage.getItem('alarmPlaying') === 'true' && !isAlarmPlaying) {
+                    playAlarm();
+                }
+                
+                // Re-acquire wake lock if needed
+                if (isAlarmPlaying && !wakeLock) {
+                    requestWakeLock();
+                }
+            }
+        });
     </script>
     
     <script>
