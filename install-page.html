@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Install OpenTravel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="icon" type="image/png" sizes="32x32" href="/3dicons-map-pin-dynamic-clay.png">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#1F2937">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="/3dicons-map-pin-dynamic-clay.png">
+    <style>
+        body {
+            font-family: 'Space Grotesk', sans-serif;
+            background-color: #111827;
+            color: #F9FAFB;
+            touch-action: manipulation;
+        }
+        
+        .status-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background-color: rgba(17, 24, 39, 0.8);
+            backdrop-filter: blur(8px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px;
+            z-index: 1000;
+            color: white;
+        }
+        
+        .install-button {
+            background-color: #10B981;
+            color: white;
+            border-radius: 8px;
+            padding: 12px 24px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+        }
+        
+        .install-button:hover {
+            background-color: #059669;
+        }
+        
+        .install-button:disabled {
+            background-color: #374151;
+            cursor: not-allowed;
+        }
+        
+        .platform-instructions {
+            display: none;
+        }
+        
+        .platform-instructions.active {
+            display: block;
+        }
+        
+        .step {
+            position: relative;
+            padding-left: 40px;
+            margin-bottom: 24px;
+        }
+        
+        .step-number {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 28px;
+            height: 28px;
+            background-color: #10B981;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        
+        .pulse-animation {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            }
+            70% {
+                transform: scale(1.05);
+                box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+            }
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
+        }
+        
+        .browser-mockup {
+            border: 2px solid #374151;
+            border-radius: 8px;
+            position: relative;
+            margin: 20px 0;
+            overflow: hidden;
+        }
+        
+        .browser-bar {
+            background-color: #1F2937;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            border-bottom: 1px solid #374151;
+        }
+        
+        .browser-content {
+            padding: 16px;
+            background-color: #111827;
+        }
+        
+        .browser-dots {
+            display: flex;
+            gap: 6px;
+            margin-right: 16px;
+        }
+        
+        .browser-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        
+        .dot-red {
+            background-color: #EF4444;
+        }
+        
+        .dot-yellow {
+            background-color: #F59E0B;
+        }
+        
+        .dot-green {
+            background-color: #10B981;
+        }
+        
+        .browser-address {
+            flex: 1;
+            background-color: #374151;
+            border-radius: 16px;
+            padding: 4px 12px;
+            font-size: 12px;
+            color: #D1D5DB;
+        }
+        
+        .highlight {
+            position: relative;
+        }
+        
+        .highlight::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            bottom: -2px;
+            width: 100%;
+            height: 6px;
+            background-color: rgba(16, 185, 129, 0.3);
+            z-index: -1;
+        }
+        
+        .device-mockup {
+            border: 8px solid #374151;
+            border-radius: 32px;
+            position: relative;
+            margin: 20px auto;
+            max-width: 280px;
+            overflow: hidden;
+        }
+        
+        .device-notch {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 120px;
+            height: 24px;
+            background-color: #374151;
+            border-bottom-left-radius: 12px;
+            border-bottom-right-radius: 12px;
+            z-index: 10;
+        }
+        
+        .device-screen {
+            background-color: #111827;
+            height: 500px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .device-home-indicator {
+            position: absolute;
+            bottom: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 100px;
+            height: 4px;
+            background-color: white;
+            border-radius: 2px;
+        }
+        
+        .share-icon {
+            position: absolute;
+            right: 16px;
+            bottom: 80px;
+            width: 40px;
+            height: 40px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .add-to-home-menu {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: #1F2937;
+            border-top-left-radius: 16px;
+            border-top-right-radius: 16px;
+            padding: 16px;
+            transform: translateY(100%);
+            animation: slideUp 1s forwards;
+            animation-delay: 1s;
+        }
+        
+        @keyframes slideUp {
+            to {
+                transform: translateY(0);
+            }
+        }
+        
+        .add-to-home-button {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            background-color: #374151;
+            margin-top: 12px;
+        }
+        
+        .add-to-home-icon {
+            width: 40px;
+            height: 40px;
+            background-color: #111827;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .platform-tabs {
+            display: flex;
+            border-bottom: 1px solid #374151;
+            margin-bottom: 24px;
+        }
+        
+        .platform-tab {
+            padding: 12px 16px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+        
+        .platform-tab.active {
+            border-bottom-color: #10B981;
+            color: #10B981;
+        }
+        
+        .platform-tab:hover:not(.active) {
+            border-bottom-color: #4B5563;
+        }
+        
+        .benefits-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            margin: 24px 0;
+        }
+        
+        .benefit-card {
+            background-color: #1F2937;
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: 12px;
+        }
+        
+        .benefit-icon {
+            width: 48px;
+            height: 48px;
+            background-color: rgba(16, 185, 129, 0.2);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #10B981;
+        }
+        
+        .back-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 8px;
+            background-color: #374151;
+            color: white;
+            text-decoration: none;
+            margin-top: 24px;
+            transition: all 0.2s ease;
+        }
+        
+        .back-button:hover {
+            background-color: #4B5563;
+        }
+        
+        /* Animation for the arrow */
+        .animated-arrow {
+            animation: bounceRight 2s infinite;
+        }
+        
+        @keyframes bounceRight {
+            0%, 100% {
+                transform: translateX(0);
+            }
+            50% {
+                transform: translateX(5px);
+            }
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 640px) {
+            .benefits-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <div class="time font-semibold" id="statusTime">04:00</div>
+        <div class="status-icons flex items-center gap-2">
+            <i data-lucide="navigation" class="w-4 h-4"></i>
+            <i data-lucide="wifi" class="w-4 h-4"></i>
+            <i data-lucide="battery" class="w-4 h-4"></i>
+        </div>
+    </div>
+    
+    <div class="container mx-auto px-4 pt-16 pb-24 max-w-4xl">
+        <div class="flex justify-center mb-8">
+            <img src="/3dicons-map-pin-dynamic-clay.png" alt="OpenTravel Logo" class="w-24 h-24">
+        </div>
+        
+        <h1 class="text-3xl font-bold text-center mb-2">Install OpenTravel</h1>
+        <p class="text-gray-400 text-center mb-8">Your journey companion, always with you</p>
+        
+        <div class="benefits-grid">
+            <div class="benefit-card">
+                <div class="benefit-icon">
+                    <i data-lucide="wifi-off" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-lg font-semibold">Works Offline</h3>
+                <p class="text-gray-400">Access your travel information even without an internet connection</p>
+            </div>
+            
+            <div class="benefit-card">
+                <div class="benefit-icon">
+                    <i data-lucide="bell" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-lg font-semibold">Push Notifications</h3>
+                <p class="text-gray-400">Get real-time alerts about your journey progress</p>
+            </div>
+            
+            <div class="benefit-card">
+                <div class="benefit-icon">
+                    <i data-lucide="zap" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-lg font-semibold">Fast Access</h3>
+                <p class="text-gray-400">Launch directly from your home screen with no browser UI</p>
+            </div>
+            
+            <div class="benefit-card">
+                <div class="benefit-icon">
+                    <i data-lucide="save" class="w-6 h-6"></i>
+                </div>
+                <h3 class="text-lg font-semibold">Save Data</h3>
+                <p class="text-gray-400">Uses less data than repeatedly loading the website</p>
+            </div>
+        </div>
+        
+        <div class="bg-gray-800 rounded-xl p-6 my-8">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-full bg-green-900 flex items-center justify-center">
+                    <i data-lucide="info" class="w-6 h-6 text-green-500"></i>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-lg">Why install OpenTravel?</h3>
+                    <p class="text-gray-400">Installing the app gives you a better experience with offline access, notifications, and quick launch from your home screen.</p>
+                </div>
+            </div>
+            
+            <div class="flex justify-center mt-4">
+                <button id="installButton" class="install-button pulse-animation">
+                    <i data-lucide="download" class="w-5 h-5"></i>
+                    <span>Install OpenTravel</span>
+                </button>
+            </div>
+        </div>
+        
+        <div class="platform-tabs">
+            <div class="platform-tab active" data-platform="ios">iOS</div>
+            <div class="platform-tab" data-platform="android">Android</div>
+            <div class="platform-tab" data-platform="desktop">Desktop</div>
+        </div>
+        
+        <div class="platform-instructions active" id="ios-instructions">
+            <h2 class="text-xl font-bold mb-4">Install on iOS</h2>
+            <p class="mb-6">Follow these steps to add OpenTravel to your iPhone or iPad home screen:</p>
+            
+            <div class="device-mockup">
+                <div class="device-notch"></div>
+                <div class="device-screen">
+                    <div class="share-icon pulse-animation">
+                        <i data-lucide="share" class="w-6 h-6"></i>
+                    </div>
+                    
+                    <div class="add-to-home-menu">
+                        <div class="flex justify-between items-center">
+                            <span class="text-gray-400">Share</span>
+                            <i data-lucide="x" class="w-5 h-5 text-gray-400"></i>
+                        </div>
+                        
+                        <div class="grid grid-cols-4 gap-4 mt-4">
+                            <div class="flex flex-col items-center">
+                                <div class="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center mb-1">
+                                    <i data-lucide="message-circle" class="w-6 h-6"></i>
+                                </div>
+                                <span class="text-xs">Messages</span>
+                            </div>
+                            
+                            <div class="flex flex-col items-center">
+                                <div class="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center mb-1">
+                                    <i data-lucide="phone" class="w-6 h-6"></i>
+                                </div>
+                                <span class="text-xs">Phone</span>
+                            </div>
+                            
+                            <div class="flex flex-col items-center">
+                                <div class="w-12 h-12 rounded-full bg-blue-400 flex items-center justify-center mb-1">
+                                    <i data-lucide="mail" class="w-6 h-6"></i>
+                                </div>
+                                <span class="text-xs">Mail</span>
+                            </div>
+                            
+                            <div class="flex flex-col items-center">
+                                <div class="w-12 h-12 rounded-full bg-gray-500 flex items-center justify-center mb-1">
+                                    <i data-lucide="copy" class="w-6 h-6"></i>
+                                </div>
+                                <span class="text-xs">Copy</span>
+                            </div>
+                        </div>
+                        
+                        <div class="add-to-home-button pulse-animation">
+                            <div class="add-to-home-icon">
+                                <i data-lucide="plus" class="w-6 h-6"></i>
+                            </div>
+                            <div class="flex-1">
+                                <div class="font-medium">Add to Home Screen</div>
+                                <div class="text-sm text-gray-400">Install as an app on your device</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="device-home-indicator"></div>
+                </div>
+            </div>
+            
+            <div class="steps mt-8">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h3 class="font-semibold mb-1">Open in Safari</h3>
+                    <p class="text-gray-400">Visit <span class="highlight">https://open-travel-psi.vercel.app/</span> in Safari browser (not in-app browsers like Instagram or Facebook).</p>
+                </div>
+                
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h3 class="font-semibold mb-1">Tap the Share button</h3>
+                    <p class="text-gray-400">Tap the <span class="highlight">Share icon</span> at the bottom of the screen (iPhone) or top of the screen (iPad).</p>
+                </div>
+                
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h3 class="font-semibold mb-1">Add to Home Screen</h3>
+                    <p class="text-gray-400">Scroll down and tap <span class="highlight">Add to Home Screen</span> in the share menu.</p>
+                </div>
+                
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <h3 class="font-semibold mb-1">Confirm Installation</h3>
+                    <p class="text-gray-400">You can edit the name if you want, then tap <span class="highlight">Add</span> in the top-right corner.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="platform-instructions" id="android-instructions">
+            <h2 class="text-xl font-bold mb-4">Install on Android</h2>
+            <p class="mb-6">Follow these steps to add OpenTravel to your Android device:</p>
+            
+            <div class="browser-mockup">
+                <div class="browser-bar">
+                    <div class="browser-dots">
+                        <div class="browser-dot dot-red"></div>
+                        <div class="browser-dot dot-yellow"></div>
+                        <div class="browser-dot dot-green"></div>
+                    </div>
+                    <div class="browser-address">open-travel-psi.vercel.app</div>
+                </div>
+                <div class="browser-content p-4 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <img src="/3dicons-map-pin-dynamic-clay.png" alt="OpenTravel Logo" class="w-10 h-10">
+                        <div>
+                            <div class="font-medium">OpenTravel</div>
+                            <div class="text-sm text-gray-400">Your journey companion</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 pulse-animation">
+                        <i data-lucide="download" class="w-5 h-5"></i>
+                        <span>Install</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="steps mt-8">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h3 class="font-semibold mb-1">Open in Chrome</h3>
+                    <p class="text-gray-400">Visit <span class="highlight">https://open-travel-psi.vercel.app/</span> in Chrome browser (or other supported browsers like Edge or Samsung Internet).</p>
+                </div>
+                
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h3 class="font-semibold mb-1">Tap the Install Banner</h3>
+                    <p class="text-gray-400">If you see an install banner at the bottom of the screen, tap <span class="highlight">Install</span>.</p>
+                </div>
+                
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h3 class="font-semibold mb-1">Or use the Menu</h3>
+                    <p class="text-gray-400">Alternatively, tap the three dots menu in the top-right corner, then select <span class="highlight">Install app</span> or <span class="highlight">Add to Home screen</span>.</p>
+                </div>
+                
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <h3 class="font-semibold mb-1">Confirm Installation</h3>
+                    <p class="text-gray-400">Tap <span class="highlight">Install</span> in the confirmation dialog that appears.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="platform-instructions" id="desktop-instructions">
+            <h2 class="text-xl font-bold mb-4">Install on Desktop</h2>
+            <p class="mb-6">Follow these steps to install OpenTravel on your computer:</p>
+            
+            <div class="browser-mockup">
+                <div class="browser-bar">
+                    <div class="browser-dots">
+                        <div class="browser-dot dot-red"></div>
+                        <div class="browser-dot dot-yellow"></div>
+                        <div class="browser-dot dot-green"></div>
+                    </div>
+                    <div class="browser-address">open-travel-psi.vercel.app</div>
+                </div>
+                <div class="browser-content p-4">
+                    <div class="bg-gray-800 p-4 rounded-lg flex items-center gap-4 pulse-animation">
+                        <img src="/3dicons-map-pin-dynamic-clay.png" alt="OpenTravel Logo" class="w-12 h-12">
+                        <div class="flex-1">
+                            <div class="font-medium">Install OpenTravel</div>
+                            <div class="text-sm text-gray-400">Install this application on your computer</div>
+                        </div>
+                        <button class="bg-blue-500 text-white px-4 py-2 rounded">Install</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="steps mt-8">
+                <div class="step">
+                    <div class="step-number">1</div>
+                    <h3 class="font-semibold mb-1">Open in Chrome, Edge, or other supported browser</h3>
+                    <p class="text-gray-400">Visit <span class="highlight">https://open-travel-psi.vercel.app/</span> in a supported browser like Chrome, Edge, or other Chromium-based browsers.</p>
+                </div>
+                
+                <div class="step">
+                    <div class="step-number">2</div>
+                    <h3 class="font-semibold mb-1">Look for the Install Prompt</h3>
+                    <p class="text-gray-400">If you see an install prompt in the address bar or as a banner, click <span class="highlight">Install</span>.</p>
+                </div>
+                
+                <div class="step">
+                    <div class="step-number">3</div>
+                    <h3 class="font-semibold mb-1">Or use the Menu</h3>
+                    <p class="text-gray-400">Alternatively, click the three dots menu in the top-right corner, then select <span class="highlight">Install OpenTravel...</span> or <span class="highlight">Apps > Install this site as an app</span>.</p>
+                </div>
+                
+                <div class="step">
+                    <div class="step-number">4</div>
+                    <h3 class="font-semibold mb-1">Confirm Installation</h3>
+                    <p class="text-gray-400">Click <span class="highlight">Install</span> in the confirmation dialog that appears.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-12 text-center">
+            <p class="text-gray-400 mb-4">After installation, you can launch OpenTravel directly from your home screen or app drawer.</p>
+            <div class="flex justify-center">
+                <a href="https://open-travel-psi.vercel.app/" class="back-button">
+                    <i data-lucide="arrow-left" class="w-5 h-5"></i>
+                    <span>Back to OpenTravel</span>
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Initialize Lucide icons
+        document.addEventListener('DOMContentLoaded', function() {
+            lucide.createIcons();
+            
+            // Update clock in status bar
+            updateClock();
+            setInterval(updateClock, 60000);
+            
+            // Platform tabs functionality
+            const platformTabs = document.querySelectorAll('.platform-tab');
+            const platformInstructions = document.querySelectorAll('.platform-instructions');
+            
+            platformTabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    // Remove active class from all tabs
+                    platformTabs.forEach(t => t.classList.remove('active'));
+                    
+                    // Add active class to clicked tab
+                    tab.classList.add('active');
+                    
+                    // Hide all instruction sections
+                    platformInstructions.forEach(section => section.classList.remove('active'));
+                    
+                    // Show the corresponding instruction section
+                    const platform = tab.getAttribute('data-platform');
+                    document.getElementById(`${platform}-instructions`).classList.add('active');
+                });
+            });
+            
+            // Detect platform and show appropriate instructions
+            const userAgent = navigator.userAgent.toLowerCase();
+            let defaultPlatform = 'desktop';
+            
+            if (/iphone|ipad|ipod/.test(userAgent)) {
+                defaultPlatform = 'ios';
+            } else if (/android/.test(userAgent)) {
+                defaultPlatform = 'android';
+            }
+            
+            // Set the default platform tab as active
+            document.querySelector(`.platform-tab[data-platform="${defaultPlatform}"]`).click();
+            
+            // Handle install button
+            const installButton = document.getElementById('installButton');
+            
+            // Check if the app is already installed
+            if (window.matchMedia('(display-mode: standalone)').matches) {
+                installButton.textContent = 'Already Installed';
+                installButton.disabled = true;
+                installButton.classList.remove('pulse-animation');
+            }
+            
+            // Handle beforeinstallprompt event
+            let deferredPrompt;
+            
+            window.addEventListener('beforeinstallprompt', (e) => {
+                // Prevent the mini-infobar from appearing on mobile
+                e.preventDefault();
+                
+                // Stash the event so it can be triggered later
+                deferredPrompt = e;
+                
+                // Update UI to notify the user they can install the PWA
+                installButton.classList.add('pulse-animation');
+                
+                // Show the install button
+                installButton.addEventListener('click', async () => {
+                    if (!deferredPrompt) {
+                        // If no installation prompt is available, show manual instructions
+                        const platformTab = document.querySelector('.platform-tab.active');
+                        const platform = platformTab.getAttribute('data-platform');
+                        
+                        // Scroll to the instructions
+                        document.getElementById(`${platform}-instructions`).scrollIntoView({ 
+                            behavior: 'smooth',
+                            block: 'start'
+                        });
+                        
+                        return;
+                    }
+                    
+                    // Show the installation prompt
+                    deferredPrompt.prompt();
+                    
+                    // Wait for the user to respond to the prompt
+                    const { outcome } = await deferredPrompt.userChoice;
+                    
+                    // Reset the deferred prompt variable
+                    deferredPrompt = null;
+                    
+                    if (outcome === 'accepted') {
+                        // The user accepted the installation
+                        installButton.textContent = 'Installing...';
+                        setTimeout(() => {
+                            installButton.textContent = 'Installed!';
+                            installButton.disabled = true;
+                            installButton.classList.remove('pulse-animation');
+                        }, 2000);
+                    }
+                });
+            });
+            
+            // Handle appinstalled event
+            window.addEventListener('appinstalled', () => {
+                // Hide the install button or show installed button
+                installButton.textContent = 'Installed!';
+                installButton.disabled = true;
+                installButton.classList.remove('pulse-animation');
+                
+                // Log the installation to analytics
+                console.log('OpenTravel was installed');
+            });
+        });
+        
+        // Update clock in status bar
+        function updateClock() {
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            document.getElementById('statusTime').textContent = `${hours}:${minutes}`;
+        }
+    </script>
+</body>
+</html>
