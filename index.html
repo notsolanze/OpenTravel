@@ -1867,6 +1867,101 @@
             );
         }
 
+           // Function to update user location
+    function updateLocation(position) {
+        const { latitude, longitude, accuracy } = position.coords;
+        
+        // Update user marker on map
+        if (userMarker) {
+            map.removeLayer(userMarker);
+        }
+        
+        userMarker = L.marker([latitude, longitude], {
+            icon: L.divIcon({
+                className: 'bg-blue-500 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center',
+                html: '<span class="text-white text-xs">📍</span>',
+                iconSize: [24, 24]
+            })
+        }).addTo(map);
+        
+        // If this is the first location update, center the map
+        if (!map.hasUserLocation) {
+            map.setView([latitude, longitude], 16);
+            map.hasUserLocation = true;
+        }
+        
+        // If we have an active destination, check distance
+        if (destination && isAlarmActive) {
+            const distance = calculateDistance(
+                { latitude, longitude },
+                { latitude: destination[0], longitude: destination[1] }
+            );
+            
+            // Update distance badge
+            document.getElementById('distance').textContent = formatDistance(distance);
+            
+            // Update live activity if visible
+            if (document.getElementById('liveActivity').classList.contains('hidden') === false) {
+                updateLiveActivity(distance);
+            }
+            
+            // Check if we've reached the destination
+            if (distance <= alarmRadius) {
+                if (!isAlarmPlaying) {
+                    playAlarm();
+                    document.getElementById('status').textContent = 'You have reached your destination!';
+                    document.getElementById('status').classList.add('text-green-500', 'font-semibold');
+                    
+                    // Show notification
+                    if (settings.enableNotifications && 'Notification' in window && Notification.permission === 'granted') {
+                        const notification = new Notification('Destination Reached!', {
+                            body: `You have arrived at ${appState.currentDestination}`,
+                            icon: '/3dicons-map-pin-dynamic-clay.png'
+                        });
+                        
+                        notification.onclick = function() {
+                            window.focus();
+                            this.close();
+                        };
+                    }
+                }
+            }
+        }
+    }
+    
+    // Function to show live activity
+    function showLiveActivity() {
+        const liveActivity = document.getElementById('liveActivity');
+        liveActivity.classList.remove('hidden');
+        
+        // Set destination name
+        document.getElementById('liveActivitySubtitle').textContent = appState.currentDestination;
+    }
+    
+    // Function to hide live activity
+    function hideLiveActivity() {
+        const liveActivity = document.getElementById('liveActivity');
+        liveActivity.classList.add('hidden');
+    }
+    
+    // Function to update live activity
+    function updateLiveActivity(distance) {
+        // Calculate progress percentage (inverse of distance/initialDistance)
+        const progressPercent = Math.max(0, Math.min(100, 100 - (distance / initialDistance * 100)));
+        
+        // Update progress bar
+        document.getElementById('liveActivityProgress').style.width = `${progressPercent}%`;
+        document.getElementById('liveActivityDot').style.left = `${progressPercent}%`;
+        
+        // Calculate ETA
+        const speed = 5; // meters per second (walking speed)
+        const remainingTimeSeconds = distance / speed;
+        const remainingMinutes = Math.ceil(remainingTimeSeconds / 60);
+        
+        // Update title
+        document.getElementById('liveActivityTitle').textContent = `${remainingMinutes} min to destination`;
+    }
+
         // Calculate distance between two points
         function calculateDistance(point1, point2) {
             const R = 6371e3; // Earth's radius in meters
