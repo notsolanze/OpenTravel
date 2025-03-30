@@ -8,13 +8,13 @@
   "theme_color": "#10B981",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/128/10473/10473293.png",
+      "src": "/3dicons-map-pin-dynamic-clay.png",
       "sizes": "128x128",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/10473/10473293.png",
+      "src": "/3dicons-map-pin-dynamic-clay.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -28,26 +28,26 @@
       "short_name": "Alarm",
       "description": "Quickly set a new travel alarm",
       "url": "/?action=set_alarm",
-      "icons": [{ "src": "https://cdn-icons-png.flaticon.com/128/10473/10473293.png", "sizes": "128x128" }]
+      "icons": [{ "src": "/3dicons-map-pin-dynamic-clay.png", "sizes": "128x128" }]
     },
     {
       "name": "Settings",
       "short_name": "Settings",
       "description": "Adjust app settings",
       "url": "/?action=settings",
-      "icons": [{ "src": "https://cdn-icons-png.flaticon.com/128/10473/10473293.png", "sizes": "128x128" }]
+      "icons": [{ "src": "/3dicons-map-pin-dynamic-clay.png", "sizes": "128x128" }]
     }
   ],
   "screenshots": [
     {
-      "src": "/placeholder.svg?height=640&width=320",
+      "src": "/3dicons-map-pin-dynamic-clay.png?height=640&width=320",
       "sizes": "320x640",
       "type": "image/png",
       "form_factor": "narrow",
       "label": "OpenTravel App - Main Screen"
     },
     {
-      "src": "/placeholder.svg?height=640&width=320",
+      "src": "/3dicons-map-pin-dynamic-clay.png?height=640&width=320",
       "sizes": "320x640",
       "type": "image/png",
       "form_factor": "narrow",
