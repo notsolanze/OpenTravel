@@ -1643,7 +1643,7 @@
         
         // Add function to register periodic sync
         function registerPeriodicSync() {
-            if ('periodicSync' in navigator.serviceWorker') {
+            if ('periodicSync' in navigator.serviceWorker) {
                 navigator.serviceWorker.ready.then(registration => {
                     registration.periodicSync.register('alarm-periodic-sync', {
                         minInterval: 60000 // Minimum interval is 1 minute
@@ -2308,6 +2308,21 @@
                 });
             }
         });
+    </script>
+    <!-- Fix for the syntax error in the registerPeriodicSync function -->
+    <script>
+        // Fix the syntax error in the registerPeriodicSync function
+        function registerPeriodicSync() {
+            if ('periodicSync' in navigator.serviceWorker) {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.periodicSync.register('alarm-periodic-sync', {
+                        minInterval: 60000 // Minimum interval is 1 minute
+                    }).catch(error => {
+                        console.error('Periodic Sync could not be registered:', error);
+                    });
+                });
+            }
+        }
     </script>
 </body>
 </html>
