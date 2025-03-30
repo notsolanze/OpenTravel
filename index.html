@@ -9,7 +9,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/128/10740/10740579.png">
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
     <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#1F2937">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -37,23 +37,6 @@
         }
         #alertPopup {
             z-index: 1000;
-        }
-        
-        /* Status bar */
-        .status-bar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 40px;
-            background-color: rgba(17, 24, 39, 0.8);
-            backdrop-filter: blur(8px);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 16px;
-            z-index: 1000;
-            color: white;
         }
         
         /* Bottom sheet */
@@ -610,6 +593,17 @@
             margin-left: 12px;
             flex-shrink: 0;
         }
+        
+        /* Fix for Lucide icons */
+        .lucide {
+            width: 24px;
+            height: 24px;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -623,8 +617,7 @@
         </div>
     </div>
 
-    <!-- Status Bar -->
-    <!-- Status Bar - Replaced with just the settings button -->
+    <!-- Settings Icon -->
     <div class="settings-icon clickable" id="settingsIcon">
         <i data-lucide="settings" class="w-6 h-6 text-white"></i>
     </div>
@@ -933,6 +926,16 @@
             }
         }
         
+        // Initialize Lucide icons
+        function initIcons() {
+            try {
+                lucide.createIcons();
+                console.log('Lucide icons initialized');
+            } catch (e) {
+                console.error('Error initializing Lucide icons:', e);
+            }
+        }
+        
         // Register service worker immediately
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
@@ -974,6 +977,9 @@
         
         // Handle splash screen
         document.addEventListener('DOMContentLoaded', () => {
+            // Initialize Lucide icons immediately
+            initIcons();
+            
             // Ensure recentLocations is initialized
             if (!recentLocations) {
                 recentLocations = [];
@@ -987,6 +993,9 @@
                 setTimeout(() => {
                     splashScreen.style.display = 'none';
                     console.log('Splash screen hidden');
+                    
+                    // Re-initialize icons after splash screen is hidden
+                    initIcons();
                 }, 500);
             }, 2000);
             
@@ -1010,21 +1019,12 @@
             // Set up bottom sheet functionality
             setupBottomSheet();
             
-            // Update clock
-            updateClock();
-            setInterval(updateClock, 60000);
-            
             // Load saved places
             loadSavedPlaces();
             
             // Populate recent locations
             populateRecentLocations();
         });
-        
-        // Update clock in status bar - no longer needed
-        function updateClock() {
-            // Function kept for compatibility but no longer updates anything
-        }
         
         // Setup bottom sheet
         function setupBottomSheet() {
@@ -1090,6 +1090,9 @@
                 e.stopPropagation(); // Stop event from propagating
                 console.log("Set destination button clicked!");
                 document.getElementById('destinationModal').classList.remove('hidden');
+                
+                // Re-initialize icons when modal is shown
+                initIcons();
             });
 
             // Close destination modal - both X button and Cancel button
@@ -1109,6 +1112,9 @@
                 if (appState.savedPlaces.home) {
                     document.getElementById('destination').value = appState.savedPlaces.home.name;
                     document.getElementById('destinationModal').classList.remove('hidden');
+                    
+                    // Re-initialize icons when modal is shown
+                    initIcons();
                 } else {
                     showAlert('Home address not set. Please set it in settings.', 'info');
                     openSettings();
@@ -1121,6 +1127,9 @@
                 if (appState.savedPlaces.work) {
                     document.getElementById('destination').value = appState.savedPlaces.work.name;
                     document.getElementById('destinationModal').classList.remove('hidden');
+                    
+                    // Re-initialize icons when modal is shown
+                    initIcons();
                 } else {
                     showAlert('Work address not set. Please set it in settings.', 'info');
                     openSettings();
@@ -1132,6 +1141,9 @@
                 console.log('New button clicked');
                 document.getElementById('destination').value = '';
                 document.getElementById('destinationModal').classList.remove('hidden');
+                
+                // Re-initialize icons when modal is shown
+                initIcons();
             });
 
             // Add keyboard support for destination input
@@ -1344,13 +1356,16 @@
                     console.log('Recent location clicked:', location.name);
                     document.getElementById('destination').value = location.name;
                     document.getElementById('destinationModal').classList.remove('hidden');
+                    
+                    // Re-initialize icons when modal is shown
+                    initIcons();
                 });
                 
                 recentLocationsContainer.appendChild(locationItem);
             });
             
             // Initialize icons
-            lucide.createIcons();
+            initIcons();
         }
 
         // Add these new functions for swipe functionality
@@ -1881,6 +1896,8 @@
         // Open settings page
         function openSettings() {
             document.getElementById('settingsPage').classList.add('active');
+            // Re-initialize icons when settings page is shown
+            initIcons();
         }
         
         // Close settings page
@@ -1908,14 +1925,6 @@
                 stopAlarm();
             });
             
-            // Remove this from initApp:
-            // Settings button - only attach to the status icons, not the entire bar
-            document.querySelector('.status-icons').addEventListener('click', function(e) {
-                e.stopPropagation(); // Stop event from propagating
-                openSettings();
-            });
-
-            // Make sure this is in initApp:
             // Settings icon click
             document.getElementById('settingsIcon').addEventListener('click', function(e) {
                 e.stopPropagation();
@@ -2108,7 +2117,7 @@
             );
 
             // Initialize Lucide icons
-            lucide.createIcons();
+            initIcons();
             
             // Listen for messages from the service worker
             navigator.serviceWorker.addEventListener('message', (event) => {
@@ -2139,13 +2148,6 @@
                 expandBottomSheetPartial();
             }, 2500); // Wait for splash screen to disappear
         }
-
-        // Add this in the initApp function after other event listeners
-        // Settings icon click
-        document.getElementById('settingsIcon').addEventListener('click', function(e) {
-            e.stopPropagation();
-            openSettings();
-        });
 
         function updateAlarmSound() {
             const audio = document.getElementById('alarmAudio');
@@ -2208,7 +2210,7 @@
             alertPopup.classList.add('opacity-100', 'translate-y-0');
             
             // Reinitialize Lucide icons for the new alert
-            lucide.createIcons();
+            initIcons();
             
             setTimeout(() => {
                 hideAlert();
@@ -2259,6 +2261,9 @@
         
         // Fix for touch events on mobile
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize Lucide icons
+            initIcons();
+            
             // Make sure all clickable elements are actually clickable
             const clickables = document.querySelectorAll('.clickable');
             clickables.forEach(el => {
