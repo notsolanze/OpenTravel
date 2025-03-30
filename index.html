@@ -24,7 +24,7 @@
         }
         .distance-badge {
             position: fixed;
-            top: 75px;
+            top: 16px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 1000;
@@ -40,21 +40,7 @@
         }
         
         /* Status bar */
-        .status-bar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 40px;
-            background-color: rgba(17, 24, 39, 0.8);
-            backdrop-filter: blur(8px);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 16px;
-            z-index: 1000;
-            color: white;
-        }
+        
         
         /* Bottom sheet */
         .bottom-sheet {
@@ -192,12 +178,18 @@
         /* Settings icon in top right */
         .settings-icon {
             position: fixed;
-            top: 0;
+            top: 16px;
             right: 16px;
+            width: 40px;
             height: 40px;
+            background-color: rgba(31, 41, 55, 0.8);
+            backdrop-filter: blur(4px);
+            border-radius: 50%;
             display: flex;
             align-items: center;
+            justify-content: center;
             z-index: 1001;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
         }
         
         .recent-location-item {
@@ -617,18 +609,9 @@
         </div>
     </div>
 
-    <!-- Status Bar -->
-    <div class="status-bar">
-        <div class="time font-semibold">04:00</div>
-        <div class="status-icons flex items-center gap-2 clickable">
-            <i data-lucide="navigation" class="w-4 h-4"></i>
-            <i data-lucide="wifi" class="w-4 h-4"></i>
-            <i data-lucide="battery" class="w-4 h-4"></i>
-        </div>
-        <!-- In the Status Bar section, add this before the closing div -->
-        <div class="settings-icon clickable" id="settingsIcon">
-            <i data-lucide="settings" class="w-5 h-5 text-white"></i>
-        </div>
+    <!-- Status Bar - Replaced with standalone settings button -->
+    <div class="settings-icon clickable" id="settingsIcon">
+        <i data-lucide="settings" class="w-6 h-6 text-white"></i>
     </div>
 
     <!-- Main Map Container -->
@@ -1013,7 +996,7 @@
             setupBottomSheet();
             
             // Update clock
-            updateClock();
+            
             setInterval(updateClock, 60000);
             
             // Load saved places
@@ -1024,12 +1007,7 @@
         });
         
         // Update clock in status bar
-        function updateClock() {
-            const now = new Date();
-            const hours = now.getHours().toString().padStart(2, '0');
-            const minutes = now.getMinutes().toString().padStart(2, '0');
-            document.querySelector('.time').textContent = `${hours}:${minutes}`;
-        }
+        
         
         // Setup bottom sheet
         function setupBottomSheet() {
@@ -1423,7 +1401,10 @@
                 boxZoom: true,
                 tap: true,
                 keyboard: true,
-                inertia: true
+                inertia: true,
+                zoomSnap: 0.5,
+                zoomDelta: 0.5,
+                wheelPxPerZoomLevel: 120
             }).setView([14.5995, 120.9842], 15); // Manila coordinates
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1465,6 +1446,14 @@
             L.control.zoom({
                 position: 'bottomright'
             }).addTo(map);
+            
+            // Make sure map container has proper pointer events
+            document.getElementById('map').style.pointerEvents = 'auto';
+            
+            // Ensure the map is responsive to window resizing
+            window.addEventListener('resize', function() {
+                map.invalidateSize();
+            });
         }
 
         // Play alarm
