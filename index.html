@@ -22,10 +22,6 @@
             color: #F9FAFB;
             touch-action: manipulation;
         }
-        /* Hide zoom controls */
-        .leaflet-control-zoom {
-            display: none !important;
-        }
         .distance-badge {
             position: fixed;
             top: 75px;
@@ -1415,27 +1411,25 @@
             showAlert('Location removed from history', 'success');
         }
         
-            // Update the initMap function to ensure the map is fully interactive
-            function initMap() {
-        // Initialize map with zoom controls disabled
-                map = L.map('map', {
-                    zoomControl: false,  // This disables the + and - buttons
-                    attributionControl: false,
-                    dragging: true,
-                    touchZoom: true,
-                    doubleClickZoom: true,
-                    scrollWheelZoom: true,
-                    boxZoom: true,
-                    tap: true,
-                    keyboard: true,
-                    inertia: true
-                }).setView([14.5995, 120.9842], 15); // Manila coordinates
-                
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    maxZoom: 19,
-                    attribution: '© OpenTravel'
-                }).addTo(map);
-            }
+        // Update the initMap function to ensure the map is fully interactive
+        function initMap() {
+            map = L.map('map', {
+                zoomControl: false,
+                attributionControl: false,
+                dragging: true,
+                touchZoom: true,
+                doubleClickZoom: true,
+                scrollWheelZoom: true,
+                boxZoom: true,
+                tap: true,
+                keyboard: true,
+                inertia: true
+            }).setView([14.5995, 120.9842], 15); // Manila coordinates
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© OpenTravel'
+            }).addTo(map);
             
             // If we have a saved destination, show it on the map
             if (appState.isJourneyActive && appState.currentDestination && appState.destinationCoords) {
@@ -2273,4 +2267,3 @@
     </script>
 </body>
 </html>
-
