@@ -587,6 +587,24 @@
             margin-left: 12px;
             flex-shrink: 0;
         }
+        
+        /* Hide Leaflet zoom control */
+        .leaflet-control-zoom {
+            display: none !important;
+        }
+        
+        /* Clock in top left */
+        .time {
+            position: fixed;
+            top: 20px;
+            left: 16px;
+            font-weight: 600;
+            z-index: 1001;
+            background: rgba(31, 41, 55, 0.8);
+            padding: 5px 10px;
+            border-radius: 12px;
+            backdrop-filter: blur(4px);
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -599,6 +617,9 @@
             <div class="splash-loader-bar"></div>
         </div>
     </div>
+
+    <!-- Clock (moved from status bar) -->
+    <div class="time font-semibold">04:00</div>
 
     <!-- Settings Icon (moved from status bar) -->
     <div class="settings-icon clickable" id="settingsIcon">
@@ -1002,7 +1023,7 @@
             const now = new Date();
             const hours = now.getHours().toString().padStart(2, '0');
             const minutes = now.getMinutes().toString().padStart(2, '0');
-            // Status bar removed, so we don't need to update the clock
+            document.querySelector('.time').textContent = `${hours}:${minutes}`;
         }
         
         // Setup bottom sheet
@@ -1388,7 +1409,7 @@
         // Update the initMap function to ensure the map is fully interactive
         function initMap() {
             map = L.map('map', {
-                zoomControl: false, // Remove zoom controls
+                zoomControl: false,
                 attributionControl: false,
                 dragging: true,
                 touchZoom: true,
@@ -1434,8 +1455,6 @@
                     map.setView(userMarker.getLatLng(), 16);
                 }
             });
-            
-            // Do NOT add zoom controls as requested
         }
 
         // Play alarm
