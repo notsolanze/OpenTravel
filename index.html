@@ -24,7 +24,7 @@
         }
         .distance-badge {
             position: fixed;
-            top: 75px;
+            top: 20px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 1000;
@@ -37,23 +37,6 @@
         }
         #alertPopup {
             z-index: 1000;
-        }
-        
-        /* Status bar */
-        .status-bar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 40px;
-            background-color: rgba(17, 24, 39, 0.8);
-            backdrop-filter: blur(8px);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0 16px;
-            z-index: 1000;
-            color: white;
         }
         
         /* Bottom sheet */
@@ -192,7 +175,7 @@
         /* Settings icon in top right */
         .settings-icon {
             position: fixed;
-            top: 0;
+            top: 20px;
             right: 16px;
             height: 40px;
             display: flex;
@@ -617,18 +600,9 @@
         </div>
     </div>
 
-    <!-- Status Bar -->
-    <div class="status-bar">
-        <div class="time font-semibold">04:00</div>
-        <div class="status-icons flex items-center gap-2 clickable">
-            <i data-lucide="navigation" class="w-4 h-4"></i>
-            <i data-lucide="wifi" class="w-4 h-4"></i>
-            <i data-lucide="battery" class="w-4 h-4"></i>
-        </div>
-        <!-- In the Status Bar section, add this before the closing div -->
-        <div class="settings-icon clickable" id="settingsIcon">
-            <i data-lucide="settings" class="w-5 h-5 text-white"></i>
-        </div>
+    <!-- Settings Icon (moved from status bar) -->
+    <div class="settings-icon clickable" id="settingsIcon">
+        <i data-lucide="settings" class="w-5 h-5 text-white"></i>
     </div>
 
     <!-- Main Map Container -->
@@ -1028,7 +1002,7 @@
             const now = new Date();
             const hours = now.getHours().toString().padStart(2, '0');
             const minutes = now.getMinutes().toString().padStart(2, '0');
-            document.querySelector('.time').textContent = `${hours}:${minutes}`;
+            // Status bar removed, so we don't need to update the clock
         }
         
         // Setup bottom sheet
@@ -1414,7 +1388,7 @@
         // Update the initMap function to ensure the map is fully interactive
         function initMap() {
             map = L.map('map', {
-                zoomControl: false,
+                zoomControl: false, // Remove zoom controls
                 attributionControl: false,
                 dragging: true,
                 touchZoom: true,
@@ -1461,10 +1435,7 @@
                 }
             });
             
-            // Add zoom controls
-            L.control.zoom({
-                position: 'bottomright'
-            }).addTo(map);
+            // Do NOT add zoom controls as requested
         }
 
         // Play alarm
@@ -1898,8 +1869,8 @@
                 stopAlarm();
             });
             
-            // Settings button - only attach to the status icons, not the entire bar
-            document.querySelector('.status-icons').addEventListener('click', function(e) {
+            // Settings icon click
+            document.getElementById('settingsIcon').addEventListener('click', function(e) {
                 e.stopPropagation(); // Stop event from propagating
                 openSettings();
             });
@@ -2121,13 +2092,6 @@
                 expandBottomSheetPartial();
             }, 2500); // Wait for splash screen to disappear
         }
-
-        // Add this in the initApp function after other event listeners
-        // Settings icon click
-        document.getElementById('settingsIcon').addEventListener('click', function(e) {
-            e.stopPropagation();
-            openSettings();
-        });
 
         function updateAlarmSound() {
             const audio = document.getElementById('alarmAudio');
