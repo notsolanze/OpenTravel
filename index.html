@@ -9,7 +9,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="https://cdn-icons-png.flaticon.com/128/10740/10740579.png">
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="manifest" href="./manifest.json">
     <meta name="theme-color" content="#1F2937">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -21,10 +21,6 @@
             background-color: #111827;
             color: #F9FAFB;
             touch-action: manipulation;
-            overflow: hidden;
-            position: fixed;
-            width: 100%;
-            height: 100%;
         }
         .distance-badge {
             position: fixed;
@@ -43,6 +39,23 @@
             z-index: 1000;
         }
         
+        /* Status bar */
+        .status-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background-color: rgba(17, 24, 39, 0.8);
+            backdrop-filter: blur(8px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px;
+            z-index: 1000;
+            color: white;
+        }
+        
         /* Bottom sheet */
         .bottom-sheet {
             position: fixed;
@@ -52,7 +65,7 @@
             background-color: #1F2937;
             border-top-left-radius: 20px;
             border-top-right-radius: 20px;
-            z-index: 800; /* Reduced z-index to be below map controls */
+            z-index: 900; /* Reduced z-index to be below compass button */
             box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
             transition: transform 0.3s ease, height 0.3s ease;
             touch-action: pan-x; /* Only allow horizontal panning */
@@ -179,18 +192,12 @@
         /* Settings icon in top right */
         .settings-icon {
             position: fixed;
-            top: 16px;
+            top: 0;
             right: 16px;
-            width: 40px;
             height: 40px;
-            background-color: rgba(31, 41, 55, 0.8);
-            backdrop-filter: blur(4px);
-            border-radius: 50%;
             display: flex;
             align-items: center;
-            justify-content: center;
             z-index: 1001;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
         }
         
         .recent-location-item {
@@ -470,7 +477,6 @@
         }
         .leaflet-container {
             background: #111827;
-            touch-action: none !important;
         }
         
         @media (prefers-color-scheme: dark) {
@@ -523,7 +529,7 @@
             left: 0;
             right: 0;
             bottom: 0;
-            z-index: 799; /* Just below the sheet */
+            z-index: 899; /* Just below the sheet */
             display: none; /* Hidden by default */
         }
         .bottom-sheet-overlay.active {
@@ -598,71 +604,6 @@
             margin-left: 12px;
             flex-shrink: 0;
         }
-        
-        /* Ensure map controls are above the bottom sheet */
-        .leaflet-control-container {
-            z-index: 1000 !important;
-            pointer-events: auto !important;
-        }
-
-        .leaflet-control-zoom {
-            z-index: 1000 !important;
-            pointer-events: auto !important;
-        }
-        
-        /* Ensure map is interactive */
-        #map {
-            z-index: 500;
-            touch-action: none !important;
-            pointer-events: auto !important;
-            position: relative;
-            height: 100vh;
-            width: 100%;
-        }
-        
-        /* Fix for Lucide icons */
-        .lucide {
-            width: 24px;
-            height: 24px;
-            stroke: currentColor;
-            stroke-width: 2;
-            stroke-linecap: round;
-            stroke-linejoin: round;
-            fill: none;
-        }
-
-        /* Time picker styles */
-        .time-picker {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 10px;
-        }
-        
-        .time-picker input {
-            background-color: #374151;
-            border: 1px solid #4B5563;
-            border-radius: 8px;
-            color: white;
-            padding: 8px;
-            width: 100%;
-        }
-        
-        /* Alarm time display */
-        .alarm-time-display {
-            background-color: #10B981;
-            color: white;
-            border-radius: 8px;
-            padding: 10px;
-            margin-top: 10px;
-            text-align: center;
-            font-weight: bold;
-            display: none;
-        }
-        
-        .alarm-time-display.active {
-            display: block;
-        }
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -676,9 +617,18 @@
         </div>
     </div>
 
-    <!-- Settings Icon -->
-    <div class="settings-icon clickable" id="settingsIcon">
-        <i data-lucide="settings" class="w-6 h-6 text-white"></i>
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <div class="time font-semibold">04:00</div>
+        <div class="status-icons flex items-center gap-2 clickable">
+            <i data-lucide="navigation" class="w-4 h-4"></i>
+            <i data-lucide="wifi" class="w-4 h-4"></i>
+            <i data-lucide="battery" class="w-4 h-4"></i>
+        </div>
+        <!-- In the Status Bar section, add this before the closing div -->
+        <div class="settings-icon clickable" id="settingsIcon">
+            <i data-lucide="settings" class="w-5 h-5 text-white"></i>
+        </div>
     </div>
 
     <!-- Main Map Container -->
@@ -768,22 +718,6 @@
                 <label for="radius" class="block text-sm font-medium text-gray-300 mb-1">Alarm Radius (meters)</label>
                 <input type="number" id="radius" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 text-white" value="1000">
             </div>
-            
-            <!-- Add time picker for alarm -->
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-300 mb-1">Set Alarm Time (optional)</label>
-                <div class="flex items-center">
-                    <input type="checkbox" id="useAlarmTime" class="mr-2">
-                    <label for="useAlarmTime" class="text-sm text-gray-300">Use phone's alarm clock</label>
-                </div>
-                <div id="timePickerContainer" class="time-picker mt-2 hidden">
-                    <input type="time" id="alarmTime" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 text-white">
-                </div>
-                <div id="alarmTimeDisplay" class="alarm-time-display">
-                    Alarm will be set for <span id="displayAlarmTime"></span>
-                </div>
-            </div>
-            
             <div class="flex justify-between items-center mt-6">
                 <button id="cancelDestinationBtn" class="bg-gray-700 text-white py-2 px-4 rounded-lg hover:bg-gray-600 transition duration-300 clickable">
                     Cancel
@@ -845,7 +779,27 @@
         
         <!-- Alarm Settings Section -->
         <div class="settings-section">
-            <h3 class="text-lg font-semibold mb-3">App Settings</h3>
+            <h3 class="text-lg font-semibold mb-3">Alarm Settings</h3>
+            
+            <div class="settings-item">
+                <label for="alarmSound" class="block text-sm font-medium text-gray-300 mb-1">Alarm Sound</label>
+                <select id="alarmSound" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 text-white">
+                    <option value="default">Default</option>
+                    <option value="chimes">Chimes</option>
+                    <option value="radar">Radar</option>
+                    <option value="beacon">Beacon</option>
+                    <option value="signal">Signal</option>
+                    <option value="bells">Bells</option>
+                    <option value="digital">Digital</option>
+                    <option value="alarm">Classic Alarm</option>
+                    <option value="siren">Siren</option>
+                </select>
+            </div>
+            
+            <div class="settings-item">
+                <label for="volume" class="block text-sm font-medium text-gray-300 mb-1">Alarm Volume</label>
+                <input type="range" id="volume" min="0" max="1" step="0.1" value="0.5" class="w-full">
+            </div>
             
             <div class="settings-item">
                 <label class="flex items-center">
@@ -857,13 +811,6 @@
             <div class="settings-item">
                 <label for="updateInterval" class="block text-sm font-medium text-gray-300 mb-1">Update Interval (seconds)</label>
                 <input type="number" id="updateInterval" class="w-full p-3 bg-gray-700 border border-gray-600 rounded-lg focus:ring-green-500 focus:border-green-500 text-white" value="30" min="10" max="300">
-            </div>
-            
-            <div class="settings-item">
-                <label class="flex items-center">
-                    <input type="checkbox" id="alwaysUseNativeAlarm" class="form-checkbox h-5 w-5 text-green-600 bg-gray-700 border-gray-600">
-                    <span class="ml-2 text-gray-300">Always use phone's alarm clock</span>
-                </label>
             </div>
         </div>
         
@@ -903,6 +850,11 @@
         </div>
     </div>
     
+    <audio id="alarmAudio" loop>
+        <source src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3" type="audio/mpeg">
+        Your browser does not support the audio element.
+    </audio>
+    
     <div id="alertPopup" class="fixed top-16 left-1/2 transform -translate-x-1/2 bg-gray-800 rounded-lg shadow-lg p-4 transition-all duration-300 ease-in-out opacity-0 -translate-y-full max-w-sm w-full mx-4 border border-gray-700">
         <div class="flex items-center gap-3">
             <div id="alertIcon" class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"></div>
@@ -919,9 +871,13 @@
     <script>
         let map, userMarker, destinationMarker, circle;
         let watchId, destination, alarmRadius;
-        let isJourneyActive = false;
+        let isAlarmPlaying = false;
+        let isAlarmActive = false;
+        let backgroundInterval;
         let initialDistance = 0;
         let journeyStartTime = null;
+        let serviceWorkerRegistration = null;
+        let isLiveActivityMinimized = false;
         let recentLocations = [];
         let bottomSheetHeight = 'partial'; // 'partial', 'full', 'minimized'
         
@@ -932,7 +888,6 @@
             currentRadius: null,
             journeyStartTime: null,
             destinationCoords: null,
-            alarmTime: null,
             savedPlaces: {
                 home: null,
                 work: null,
@@ -942,9 +897,10 @@
 
         // Load settings from local storage
         let settings = JSON.parse(localStorage.getItem('alarmSettings')) || {
+            alarmSound: 'default',
+            volume: 0.5,
             enableNotifications: true,
             updateInterval: 30,
-            alwaysUseNativeAlarm: false,
             savedPlaces: {
                 home: null,
                 work: null,
@@ -979,21 +935,47 @@
             }
         }
         
-        // Initialize Lucide icons
-        function initIcons() {
-            try {
-                lucide.createIcons();
-                console.log('Lucide icons initialized');
-            } catch (e) {
-                console.error('Error initializing Lucide icons:', e);
-            }
+        // Register service worker immediately
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(function(registration) {
+                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                        serviceWorkerRegistration = registration;
+                        
+                        // Force update the service worker
+                        registration.update();
+                        
+                        // Check if service worker is active
+                        if (registration.active) {
+                            console.log('Service worker is active');
+                            
+                            // If we have an active journey, restore it
+                            if (appState.isJourneyActive && appState.currentDestination) {
+                                // Restore journey state
+                                setTimeout(() => {
+                                    document.getElementById('status').textContent = 'Resuming your journey...';
+                                    setAlarm(true); // Pass true to indicate this is a resume
+                                }, 2500); // Wait for the app to initialize
+                            }
+                        } else {
+                            console.log('Service worker is not yet active');
+                            // Wait for the service worker to become active
+                            navigator.serviceWorker.ready.then(function(registration) {
+                                console.log('Service worker is now ready');
+                                serviceWorkerRegistration = registration;
+                            });
+                        }
+                    })
+                    .catch(function(err) {
+                        console.log('ServiceWorker registration failed: ', err);
+                        showAlert('Service worker registration failed. Some features may not work.', 'error');
+                    });
+            });
         }
         
         // Handle splash screen
         document.addEventListener('DOMContentLoaded', () => {
-            // Initialize Lucide icons immediately
-            initIcons();
-            
             // Ensure recentLocations is initialized
             if (!recentLocations) {
                 recentLocations = [];
@@ -1007,9 +989,6 @@
                 setTimeout(() => {
                     splashScreen.style.display = 'none';
                     console.log('Splash screen hidden');
-                    
-                    // Re-initialize icons after splash screen is hidden
-                    initIcons();
                 }, 500);
             }, 2000);
             
@@ -1033,73 +1012,23 @@
             // Set up bottom sheet functionality
             setupBottomSheet();
             
+            // Update clock
+            updateClock();
+            setInterval(updateClock, 60000);
+            
             // Load saved places
             loadSavedPlaces();
             
             // Populate recent locations
             populateRecentLocations();
-            
-            // Set up alarm time checkbox
-            setupAlarmTimeCheckbox();
         });
         
-        // Setup alarm time checkbox
-        function setupAlarmTimeCheckbox() {
-            const useAlarmTimeCheckbox = document.getElementById('useAlarmTime');
-            const timePickerContainer = document.getElementById('timePickerContainer');
-            const alarmTimeDisplay = document.getElementById('alarmTimeDisplay');
-            
-            useAlarmTimeCheckbox.addEventListener('change', function() {
-                if (this.checked) {
-                    timePickerContainer.classList.remove('hidden');
-                    
-                    // Set default time to 30 minutes from now
-                    const now = new Date();
-                    now.setMinutes(now.getMinutes() + 30);
-                    const hours = now.getHours().toString().padStart(2, '0');
-                    const minutes = now.getMinutes().toString().padStart(2, '0');
-                    document.getElementById('alarmTime').value = `${hours}:${minutes}`;
-                    
-                    // Update display
-                    document.getElementById('displayAlarmTime').textContent = formatTime(`${hours}:${minutes}`);
-                    alarmTimeDisplay.classList.add('active');
-                } else {
-                    timePickerContainer.classList.add('hidden');
-                    alarmTimeDisplay.classList.remove('active');
-                }
-            });
-            
-            // Update display when time changes
-            document.getElementById('alarmTime').addEventListener('change', function() {
-                document.getElementById('displayAlarmTime').textContent = formatTime(this.value);
-            });
-            
-            // Check if "always use native alarm" is enabled
-            if (settings.alwaysUseNativeAlarm) {
-                useAlarmTimeCheckbox.checked = true;
-                timePickerContainer.classList.remove('hidden');
-                
-                // Set default time to 30 minutes from now
-                const now = new Date();
-                now.setMinutes(now.getMinutes() + 30);
-                const hours = now.getHours().toString().padStart(2, '0');
-                const minutes = now.getMinutes().toString().padStart(2, '0');
-                document.getElementById('alarmTime').value = `${hours}:${minutes}`;
-                
-                // Update display
-                document.getElementById('displayAlarmTime').textContent = formatTime(`${hours}:${minutes}`);
-                alarmTimeDisplay.classList.add('active');
-            }
-        }
-        
-        // Format time for display
-        function formatTime(timeString) {
-            const [hours, minutes] = timeString.split(':');
-            const date = new Date();
-            date.setHours(parseInt(hours));
-            date.setMinutes(parseInt(minutes));
-            
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        // Update clock in status bar
+        function updateClock() {
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            document.querySelector('.time').textContent = `${hours}:${minutes}`;
         }
         
         // Setup bottom sheet
@@ -1166,9 +1095,6 @@
                 e.stopPropagation(); // Stop event from propagating
                 console.log("Set destination button clicked!");
                 document.getElementById('destinationModal').classList.remove('hidden');
-                
-                // Re-initialize icons when modal is shown
-                initIcons();
             });
 
             // Close destination modal - both X button and Cancel button
@@ -1188,9 +1114,6 @@
                 if (appState.savedPlaces.home) {
                     document.getElementById('destination').value = appState.savedPlaces.home.name;
                     document.getElementById('destinationModal').classList.remove('hidden');
-                    
-                    // Re-initialize icons when modal is shown
-                    initIcons();
                 } else {
                     showAlert('Home address not set. Please set it in settings.', 'info');
                     openSettings();
@@ -1203,9 +1126,6 @@
                 if (appState.savedPlaces.work) {
                     document.getElementById('destination').value = appState.savedPlaces.work.name;
                     document.getElementById('destinationModal').classList.remove('hidden');
-                    
-                    // Re-initialize icons when modal is shown
-                    initIcons();
                 } else {
                     showAlert('Work address not set. Please set it in settings.', 'info');
                     openSettings();
@@ -1217,15 +1137,12 @@
                 console.log('New button clicked');
                 document.getElementById('destination').value = '';
                 document.getElementById('destinationModal').classList.remove('hidden');
-                
-                // Re-initialize icons when modal is shown
-                initIcons();
             });
 
             // Add keyboard support for destination input
             document.getElementById('destination').addEventListener('keyup', function(event) {
                 if (event.key === 'Enter') {
-                    setDestination();
+                    setAlarm(false);
                 }
             });
             
@@ -1296,7 +1213,7 @@
             overlay.classList.add('active');
         }
 
-        // Update destination display
+        // Replace the setupDestinationAutocomplete function with this:
         function updateDestinationDisplay() {
             const noDestination = document.querySelector('.no-destination');
             const activeDestination = document.querySelector('.active-destination');
@@ -1372,7 +1289,7 @@
             }
         }
         
-        // Populate recent locations
+        // Replace the populateRecentLocations function with this updated version
         function populateRecentLocations() {
             const recentLocationsContainer = document.getElementById('recentLocations');
             recentLocationsContainer.innerHTML = '';
@@ -1432,19 +1349,16 @@
                     console.log('Recent location clicked:', location.name);
                     document.getElementById('destination').value = location.name;
                     document.getElementById('destinationModal').classList.remove('hidden');
-                    
-                    // Re-initialize icons when modal is shown
-                    initIcons();
                 });
                 
                 recentLocationsContainer.appendChild(locationItem);
             });
             
             // Initialize icons
-            initIcons();
+            lucide.createIcons();
         }
 
-        // Add swipe functionality
+        // Add these new functions for swipe functionality
         function addSwipeToDelete(element) {
             let startX, moveX, currentTranslate = 0;
             let isSwiping = false;
@@ -1497,11 +1411,8 @@
             showAlert('Location removed from history', 'success');
         }
         
-        // Initialize map
+        // Update the initMap function to ensure the map is fully interactive
         function initMap() {
-            // Prevent page scrolling when map is active
-            document.body.style.overflow = 'hidden';
-            
             map = L.map('map', {
                 zoomControl: false,
                 attributionControl: false,
@@ -1512,10 +1423,7 @@
                 boxZoom: true,
                 tap: true,
                 keyboard: true,
-                inertia: true,
-                zoomSnap: 0.1,
-                zoomDelta: 0.5,
-                wheelPxPerZoomLevel: 120
+                inertia: true
             }).setView([14.5995, 120.9842], 15); // Manila coordinates
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1553,40 +1461,66 @@
                 }
             });
             
-            // Add zoom controls with higher z-index
-            const zoomControl = L.control.zoom({
+            // Add zoom controls
+            L.control.zoom({
                 position: 'bottomright'
-            });
-            zoomControl.addTo(map);
+            }).addTo(map);
+        }
+
+        // Play alarm
+        function playAlarm() {
+            if (!isAlarmPlaying) {
+                const audio = document.getElementById('alarmAudio');
+                audio.volume = settings.volume;
+                audio.play();
+                isAlarmPlaying = true;
+                console.log('Playing alarm sound');
+                
+                document.getElementById('stopAlarm').classList.remove('hidden');
+                document.getElementById('setAlarm').classList.add('hidden');
+                
+                // Vibrate if supported
+                if ('vibrate' in navigator) {
+                    navigator.vibrate([200, 100, 200]);
+                }
+            }
+        }
+
+        // Stop alarm
+        function stopAlarm() {
+            const audio = document.getElementById('alarmAudio');
+            audio.pause();
+            audio.currentTime = 0;
+            isAlarmPlaying = false;
+            isAlarmActive = false;
+            document.getElementById('stopAlarm').classList.add('hidden');
+            document.getElementById('setAlarm').classList.remove('hidden');
+            showAlert('Alarm stopped. Set a new alarm to continue monitoring.', 'info');
             
-            // Ensure zoom controls are above bottom sheet
-            const zoomControlContainer = document.querySelector('.leaflet-control-zoom');
-            if (zoomControlContainer) {
-                zoomControlContainer.style.zIndex = '1000';
+            // Hide live activity
+            hideLiveActivity();
+            
+            // Stop journey in service worker
+            if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+                serviceWorkerRegistration.active.postMessage({
+                    type: 'STOP_JOURNEY'
+                });
+            }
+
+            // Clear background interval
+            if (backgroundInterval) {
+                clearInterval(backgroundInterval);
             }
             
-            // Make sure map is interactive
-            const mapContainer = map.getContainer();
-            mapContainer.style.cursor = 'grab';
+            // Clear journey state
+            appState.isJourneyActive = false;
+            localStorage.setItem('journeyState', JSON.stringify(appState));
             
-            // Prevent default touch behavior on the map
-            mapContainer.addEventListener('touchstart', function(e) {
-                e.preventDefault();
-                mapContainer.style.cursor = 'grabbing';
-            }, { passive: false });
+            // Update the destination display
+            updateDestinationDisplay();
             
-            mapContainer.addEventListener('touchmove', function(e) {
-                e.preventDefault();
-            }, { passive: false });
-            
-            mapContainer.addEventListener('touchend', function() {
-                mapContainer.style.cursor = 'grab';
-            }, { passive: false });
-            
-            // Prevent bottom sheet from interfering with map interactions
-            mapContainer.addEventListener('click', function(e) {
-                e.stopPropagation();
-            });
+            // Close destination modal
+            document.getElementById('destinationModal').classList.add('hidden');
         }
 
         // Update user location
@@ -1606,7 +1540,7 @@
                 userMarker.setLatLng([latitude, longitude]);
             }
 
-            if (destination && isJourneyActive) {
+            if (destination && isAlarmActive) {
                 const distance = map.distance([latitude, longitude], destination);
                 
                 // Update distance display
@@ -1615,22 +1549,26 @@
                 // Update live activity
                 updateLiveActivity(distance);
                 
+                // Send location update to service worker
+                if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+                    serviceWorkerRegistration.active.postMessage({
+                        type: 'UPDATE_LOCATION',
+                        location: { latitude, longitude },
+                        distance: distance
+                    });
+                } else {
+                    console.log('Service worker not ready for location update');
+                }
+                
                 // Check if we've reached the destination
-                if (distance <= alarmRadius) {
-                    // We've reached the destination
-                    showAlert('You have reached your destination!', 'success');
+                if (distance <= alarmRadius && !isAlarmPlaying) {
+                    playAlarm();
+                    document.getElementById('status').textContent = 'You have reached your destination!';
+                    document.getElementById('status').classList.add('text-green-500', 'font-semibold');
                     
                     // Clear journey state
                     appState.isJourneyActive = false;
                     localStorage.setItem('journeyState', JSON.stringify(appState));
-                    
-                    // Update the destination display
-                    updateDestinationDisplay();
-                    
-                    // Hide live activity
-                    hideLiveActivity();
-                    
-                    isJourneyActive = false;
                 }
             }
         }
@@ -1706,34 +1644,75 @@
             showLiveActivity();
         }
 
-        // Set destination and optionally set a phone alarm
-        function setDestination() {
+        // Set alarm
+        function setAlarm(isResume = false) {
             const destinationInput = document.getElementById('destination').value;
             alarmRadius = parseInt(document.getElementById('radius').value);
-            const useAlarmTime = document.getElementById('useAlarmTime').checked;
-            let alarmTime = null;
-            
+
             if (!destinationInput) {
                 showAlert('Please enter a destination', 'error');
                 return;
             }
-            
-            // If using alarm time, get the time
-            if (useAlarmTime) {
-                alarmTime = document.getElementById('alarmTime').value;
-                if (!alarmTime) {
-                    showAlert('Please set an alarm time', 'error');
-                    return;
+
+            // Check if service worker is ready
+            if (!serviceWorkerRegistration || !serviceWorkerRegistration.active) {
+                showAlert('Service worker not ready. Please wait a moment and try again.', 'error');
+                
+                // Try to register service worker again
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.register('./service-worker.js')
+                        .then(registration => {
+                            console.log('Service Worker registered with scope:', registration.scope);
+                            serviceWorkerRegistration = registration;
+                            showAlert('Service worker registered. Please try again.', 'success');
+                        })
+                        .catch(error => {
+                            console.error('Service Worker registration failed:', error);
+                            showAlert('Service worker registration failed. Please refresh the page.', 'error');
+                        });
                 }
+                
+                return;
+            }
+
+            // Force request notification permission if not already granted
+            if (Notification.permission !== "granted") {
+                Notification.requestPermission().then(permission => {
+                    if (permission === "granted") {
+                        proceedWithAlarmSetup(destinationInput, isResume);
+                    } else {
+                        showAlert('Notification permission is required for this app to work properly', 'error');
+                    }
+                });
+            } else {
+                proceedWithAlarmSetup(destinationInput, isResume);
+            }
+        }
+        
+        // Proceed with alarm setup after permission check
+        function proceedWithAlarmSetup(destinationInput, isResume) {
+            // If we're resuming and have coordinates, skip geocoding
+            if (isResume && appState.destinationCoords) {
+                destination = appState.destinationCoords;
+                setupJourney(destination, destinationInput);
+                
+                // Add to recent locations even when resuming
+                if (appState.currentDestination) {
+                    addToRecentLocations({
+                        name: appState.currentDestination,
+                        address: 'Resumed journey',
+                        coords: appState.destinationCoords
+                    });
+                }
+                return;
             }
             
-            // Geocode the destination
             fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destinationInput)}, Philippines`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.length > 0) {
                         destination = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-                        setupJourney(destination, destinationInput, alarmTime);
+                        setupJourney(destination, destinationInput);
                         
                         // Add to recent locations
                         addToRecentLocations({
@@ -1754,7 +1733,7 @@
         }
         
         // Setup journey after getting coordinates
-        function setupJourney(destCoords, destName, alarmTime) {
+        function setupJourney(destCoords, destName) {
             if (destinationMarker) map.removeLayer(destinationMarker);
             if (circle) map.removeLayer(circle);
             
@@ -1801,7 +1780,14 @@
                         }
                     );
                     
-                    document.getElementById('status').textContent = 'Destination set. Monitoring location...';
+                    document.getElementById('status').textContent = 'Alarm set. Monitoring location...';
+                    document.getElementById('status').classList.remove('text-green-500', 'font-semibold');
+                    
+                    // Save alarm settings
+                    settings.destination = destName;
+                    settings.radius = alarmRadius;
+                    localStorage.setItem('alarmSettings', JSON.stringify(settings));
+                    isAlarmActive = true;
                     
                     // Save journey state
                     appState.isJourneyActive = true;
@@ -1809,11 +1795,7 @@
                     appState.currentRadius = alarmRadius;
                     appState.destinationCoords = destCoords;
                     appState.journeyStartTime = Date.now();
-                    appState.alarmTime = alarmTime;
                     localStorage.setItem('journeyState', JSON.stringify(appState));
-                    
-                    // Set journey as active
-                    isJourneyActive = true;
 
                     // Update the destination display
                     updateDestinationDisplay();
@@ -1822,19 +1804,38 @@
                     showLiveActivity();
                     updateLiveActivity(initialDistance);
                     
-                    // If alarm time is set, set a phone alarm
-                    if (alarmTime) {
-                        setPhoneAlarm(alarmTime, destName);
+                    // Calculate estimated arrival time
+                    const speed = 5; // meters per second (walking speed)
+                    const estimatedTimeSeconds = initialDistance / speed;
+                    journeyStartTime = Date.now();
+                    const estimatedArrivalTime = new Date(journeyStartTime + (estimatedTimeSeconds * 1000));
+                    
+                    // Start journey in service worker
+                    if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+                        serviceWorkerRegistration.active.postMessage({
+                            type: 'START_JOURNEY',
+                            journeyData: {
+                                destination: destCoords,
+                                destinationName: destName,
+                                radius: alarmRadius,
+                                initialDistance: initialDistance,
+                                estimatedTime: estimatedArrivalTime.getTime(),
+                                speed: 5, // meters per second
+                                updateInterval: settings.updateInterval
+                            }
+                        });
+                        
+                        showAlert('Journey started! Check your notification tray.', 'success');
+                    } else {
+                        showAlert('Service worker not ready. Notifications may not work properly.', 'error');
                     }
                     
                     // Close destination modal
                     document.getElementById('destinationModal').classList.add('hidden');
-                    
-                    showAlert('Journey started!', 'success');
                 },
                 error => {
                     console.error('Error getting initial position:', error);
-                    showAlert('Unable to get your initial location. Please check your settings and try again.', 'error');
+                    showAlert('Unable to get your initial position. Please check your settings and try again.', 'error');
                 },
                 {
                     enableHighAccuracy: true,
@@ -1842,74 +1843,6 @@
                     timeout: 5000
                 }
             );
-        }
-        
-        // Set phone alarm using appropriate method for the device
-        function setPhoneAlarm(timeString, destinationName) {
-            const [hours, minutes] = timeString.split(':');
-            const alarmTime = new Date();
-            alarmTime.setHours(parseInt(hours));
-            alarmTime.setMinutes(parseInt(minutes));
-            alarmTime.setSeconds(0);
-            
-            // Format time for display
-            const formattedTime = alarmTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            
-            // Check if the time is in the past
-            if (alarmTime < new Date()) {
-                // Set for tomorrow
-                alarmTime.setDate(alarmTime.getDate() + 1);
-            }
-            
-            // Create alarm label
-            const alarmLabel = `Arrival at ${destinationName}`;
-            
-            // Try to set an alarm using the appropriate method for the device
-            try {
-                // For Android
-                if (/android/i.test(navigator.userAgent)) {
-                    // Create intent URL for Android alarm
-                    const intentUrl = `intent:#Intent;action=android.intent.action.SET_ALARM;` +
-                        `android.intent.extra.alarm.HOUR=${hours};` +
-                        `android.intent.extra.alarm.MINUTES=${minutes};` +
-                        `android.intent.extra.alarm.MESSAGE=${encodeURIComponent(alarmLabel)};` +
-                        `end`;
-                    
-                    // Open in a new window
-                    window.open(intentUrl);
-                    showAlert(`Alarm set for ${formattedTime}`, 'success');
-                    return;
-                }
-                
-                // For iOS
-                if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
-                    // Create URL for iOS clock app
-                    const iosUrl = `clock:///createAlarm?hour=${hours}&minutes=${minutes}&label=${encodeURIComponent(alarmLabel)}`;
-                    
-                    // Try to open the Clock app
-                    window.location.href = iosUrl;
-                    
-                    // Fallback to calendar event if clock URL doesn't work
-                    setTimeout(() => {
-                        const now = new Date();
-                        if (now.getTime() - Date.now() < 500) { // If less than 500ms passed, the clock URL didn't work
-                            // Create calendar event instead
-                            const calendarUrl = `calshow:${alarmTime.getTime()}`;
-                            window.location.href = calendarUrl;
-                        }
-                    }, 300);
-                    
-                    showAlert(`Please set an alarm for ${formattedTime} in your clock app`, 'info');
-                    return;
-                }
-                
-                // Fallback for other devices - show instructions
-                showAlert(`Please set an alarm on your phone for ${formattedTime}`, 'info');
-                
-            } catch (error) {
-                console.error('Error setting alarm:', error);
-                showAlert(`Please set an alarm on your phone for ${formattedTime}`, 'info');
-            }
         }
 
         // Calculate distance between two points
@@ -1938,11 +1871,6 @@
         // Open settings page
         function openSettings() {
             document.getElementById('settingsPage').classList.add('active');
-            // Re-initialize icons when settings page is shown
-            initIcons();
-            
-            // Set checkbox state
-            document.getElementById('alwaysUseNativeAlarm').checked = settings.alwaysUseNativeAlarm;
         }
         
         // Close settings page
@@ -1957,16 +1885,22 @@
             // Update destination display
             updateDestinationDisplay();
             
-            // Set destination button
+            // Set alarm button
             document.getElementById('setAlarm').addEventListener('click', (e) => {
                 e.stopPropagation();
                 console.log("Go button clicked!");
-                setDestination();
+                setAlarm(false);
             });
             
-            // Settings icon click
-            document.getElementById('settingsIcon').addEventListener('click', function(e) {
+            // Stop alarm button
+            document.getElementById('stopAlarm').addEventListener('click', (e) => {
                 e.stopPropagation();
+                stopAlarm();
+            });
+            
+            // Settings button - only attach to the status icons, not the entire bar
+            document.querySelector('.status-icons').addEventListener('click', function(e) {
+                e.stopPropagation(); // Stop event from propagating
                 openSettings();
             });
             
@@ -1975,15 +1909,18 @@
             
             // Save settings
             document.getElementById('saveSettings').addEventListener('click', () => {
+                const newAlarmSound = document.getElementById('alarmSound').value;
+                const newVolume = parseFloat(document.getElementById('volume').value);
                 const newEnableNotifications = document.getElementById('enableNotifications').checked;
                 const newUpdateInterval = parseInt(document.getElementById('updateInterval').value);
-                const newAlwaysUseNativeAlarm = document.getElementById('alwaysUseNativeAlarm').checked;
                 
+                settings.alarmSound = newAlarmSound;
+                settings.volume = newVolume;
                 settings.enableNotifications = newEnableNotifications;
                 settings.updateInterval = newUpdateInterval;
-                settings.alwaysUseNativeAlarm = newAlwaysUseNativeAlarm;
                 
                 localStorage.setItem('alarmSettings', JSON.stringify(settings));
+                updateAlarmSound();
                 
                 if (newEnableNotifications && Notification.permission !== "granted") {
                     Notification.requestPermission();
@@ -2001,9 +1938,10 @@
                     localStorage.removeItem('recentLocations');
                     
                     settings = { 
+                        alarmSound: 'default', 
+                        volume: 0.5, 
                         enableNotifications: true,
                         updateInterval: 30,
-                        alwaysUseNativeAlarm: false,
                         savedPlaces: {
                             home: null,
                             work: null,
@@ -2017,7 +1955,6 @@
                         currentRadius: null,
                         journeyStartTime: null,
                         destinationCoords: null,
-                        alarmTime: null,
                         savedPlaces: {
                             home: null,
                             work: null,
@@ -2027,13 +1964,15 @@
                     
                     recentLocations = [];
                     
+                    document.getElementById('alarmSound').value = 'default';
+                    document.getElementById('volume').value = '0.5';
                     document.getElementById('enableNotifications').checked = true;
                     document.getElementById('updateInterval').value = '30';
-                    document.getElementById('alwaysUseNativeAlarm').checked = false;
                     document.getElementById('homeAddress').value = '';
                     document.getElementById('workAddress').value = '';
                     document.getElementById('favoritePlace').value = '';
                     
+                    updateAlarmSound();
                     populateRecentLocations();
                     
                     showAlert('All settings and data have been reset!', 'success');
@@ -2151,12 +2090,76 @@
             );
 
             // Initialize Lucide icons
-            initIcons();
+            lucide.createIcons();
+            
+            // Listen for messages from the service worker
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                console.log('[Main] Message received from service worker:', event.data);
+                
+                if (event.data && event.data.type === 'JOURNEY_CANCELED') {
+                    stopAlarm();
+                    showAlert('Journey canceled', 'info');
+                } else if (event.data && event.data.type === 'PLAY_ALARM') {
+                    // Play alarm when service worker tells us to
+                    playAlarm();
+                    showAlert('You have reached your destination!', 'success');
+                } else if (event.data && event.data.type === 'ARRIVED_AT_DESTINATION') {
+                    // Handle arrival notification click
+                    document.getElementById('status').textContent = 'You have reached your destination!';
+                    document.getElementById('status').classList.add('text-green-500', 'font-semibold');
+                    
+                    // Clear journey state if not already done
+                    if (appState.isJourneyActive) {
+                        appState.isJourneyActive = false;
+                        localStorage.setItem('journeyState', JSON.stringify(appState));
+                    }
+                }
+            });
             
             // Show bottom sheet in partial state initially
             setTimeout(() => {
                 expandBottomSheetPartial();
             }, 2500); // Wait for splash screen to disappear
+        }
+
+        // Add this in the initApp function after other event listeners
+        // Settings icon click
+        document.getElementById('settingsIcon').addEventListener('click', function(e) {
+            e.stopPropagation();
+            openSettings();
+        });
+
+        function updateAlarmSound() {
+            const audio = document.getElementById('alarmAudio');
+            switch (settings.alarmSound) {
+                case 'chimes':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3';
+                    break;
+                case 'radar':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2569/2569-preview.mp3';
+                    break;
+                case 'beacon':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2570/2570-preview.mp3';
+                    break;
+                case 'signal':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2908/2908-preview.mp3';
+                    break;
+                case 'bells':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2910/2910-preview.mp3';
+                    break;
+                case 'digital':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2573/2573-preview.mp3';
+                    break;
+                case 'alarm':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2574/2574-preview.mp3';
+                    break;
+                case 'siren':
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2575/2575-preview.mp3';
+                    break;
+                default:
+                    audio.src = 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3';
+            }
+            audio.volume = settings.volume;
         }
 
         function showAlert(message, type = 'error') {
@@ -2187,7 +2190,7 @@
             alertPopup.classList.add('opacity-100', 'translate-y-0');
             
             // Reinitialize Lucide icons for the new alert
-            initIcons();
+            lucide.createIcons();
             
             setTimeout(() => {
                 hideAlert();
@@ -2232,11 +2235,12 @@
     </script>
     
     <script>
-        // Fix for map interactivity
+        // Add this at the end of the DOMContentLoaded event handler
+        // Ensure map container has proper pointer events
+        document.getElementById('map').style.pointerEvents = 'auto';
+        
+        // Fix for touch events on mobile
         document.addEventListener('DOMContentLoaded', function() {
-            // Initialize Lucide icons
-            initIcons();
-            
             // Make sure all clickable elements are actually clickable
             const clickables = document.querySelectorAll('.clickable');
             clickables.forEach(el => {
@@ -2246,31 +2250,18 @@
                 });
             });
             
-            // Ensure map container has proper pointer events
-            const mapContainer = document.getElementById('map');
-            if (mapContainer) {
-                mapContainer.style.pointerEvents = 'auto';
-                mapContainer.style.touchAction = 'none';
-                
-                // Prevent bottom sheet from capturing map events
-                mapContainer.addEventListener('touchmove', function(e) {
-                    e.stopPropagation();
-                }, { passive: true });
-                
-                mapContainer.addEventListener('click', function(e) {
+            // Debug logging for search bar clicks
+            const searchBar = document.getElementById('searchBar');
+            if (searchBar) {
+                searchBar.addEventListener('touchstart', function(e) {
+                    console.log('Search bar touched!');
                     e.stopPropagation();
                 });
-            }
-            
-            // Ensure bottom sheet doesn't interfere with map
-            const bottomSheet = document.getElementById('bottomSheet');
-            if (bottomSheet) {
-                bottomSheet.addEventListener('touchmove', function(e) {
-                    // Only allow touch events on the bottom sheet itself
-                    if (e.target !== bottomSheet && !bottomSheet.contains(e.target)) {
-                        e.stopPropagation();
-                    }
-                }, { passive: true });
+                
+                searchBar.addEventListener('mousedown', function(e) {
+                    console.log('Search bar mouse down!');
+                    e.stopPropagation();
+                });
             }
         });
     </script>
