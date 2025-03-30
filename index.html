@@ -609,9 +609,18 @@
         </div>
     </div>
 
-    <!-- Status Bar - Replaced with standalone settings button -->
-    <div class="settings-icon clickable" id="settingsIcon">
-        <i data-lucide="settings" class="w-6 h-6 text-white"></i>
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <div class="time font-semibold">04:00</div>
+        <div class="status-icons flex items-center gap-2 clickable">
+            <i data-lucide="navigation" class="w-4 h-4"></i>
+            <i data-lucide="wifi" class="w-4 h-4"></i>
+            <i data-lucide="battery" class="w-4 h-4"></i>
+        </div>
+        <!-- In the Status Bar section, add this before the closing div -->
+        <div class="settings-icon clickable" id="settingsIcon">
+            <i data-lucide="settings" class="w-5 h-5 text-white"></i>
+        </div>
     </div>
 
     <!-- Main Map Container -->
@@ -996,7 +1005,7 @@
             setupBottomSheet();
             
             // Update clock
-            
+            updateClock();
             setInterval(updateClock, 60000);
             
             // Load saved places
@@ -1007,7 +1016,12 @@
         });
         
         // Update clock in status bar
-        
+        function updateClock() {
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            document.querySelector('.time').textContent = `${hours}:${minutes}`;
+        }
         
         // Setup bottom sheet
         function setupBottomSheet() {
@@ -1401,10 +1415,7 @@
                 boxZoom: true,
                 tap: true,
                 keyboard: true,
-                inertia: true,
-                zoomSnap: 0.5,
-                zoomDelta: 0.5,
-                wheelPxPerZoomLevel: 120
+                inertia: true
             }).setView([14.5995, 120.9842], 15); // Manila coordinates
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1446,14 +1457,6 @@
             L.control.zoom({
                 position: 'bottomright'
             }).addTo(map);
-            
-            // Make sure map container has proper pointer events
-            document.getElementById('map').style.pointerEvents = 'auto';
-            
-            // Ensure the map is responsive to window resizing
-            window.addEventListener('resize', function() {
-                map.invalidateSize();
-            });
         }
 
         // Play alarm
