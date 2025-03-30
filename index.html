@@ -1041,6 +1041,18 @@
             }
         });
         
+        // Add a failsafe for the splash screen
+        let splashTimeout = setTimeout(() => {
+            const splashScreen = document.getElementById('splashScreen');
+            if (splashScreen && splashScreen.style.display !== 'none') {
+                console.log('Splash screen failsafe triggered');
+                splashScreen.style.opacity = '0';
+                setTimeout(() => {
+                    splashScreen.style.display = 'none';
+                }, 500);
+            }
+        }, 5000); // Force hide after 5 seconds if not already hidden
+        
         // Update clock in status bar
         function updateClock() {
             const now = new Date();
