@@ -816,6 +816,10 @@
             <div class="settings-item">
                 <label for="volume" class="block text-sm font-medium text-gray-300 mb-1">Alarm Volume</label>
                 <input type="range" id="volume" min="0" max="1" step="0.1" value="0.5" class="w-full">
+                <button id="enableAudioButton" class="mt-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 flex items-center justify-center gap-2 w-full hidden">
+                    <i data-lucide="volume-2" class="w-5 h-5"></i>
+                    <span>Enable Audio</span>
+                </button>
             </div>
             
             <div class="settings-item">
@@ -874,10 +878,7 @@
         Your browser does not support the audio element.
     </audio>
     
-    <!-- Enable Audio Button -->
-    <button id="enableAudioButton" class="hidden">
-        <i data-lucide="volume-2" class="w-6 h-6"></i>
-    </button>
+    
     
     <div id="alertPopup" class="fixed top-16 left-1/2 transform -translate-x-1/2 bg-gray-800 rounded-lg shadow-lg p-4 transition-all duration-300 ease-in-out opacity-0 -translate-y-full max-w-sm w-full mx-4 border border-gray-700">
         <div class="flex items-center gap-3">
@@ -1115,8 +1116,11 @@
                     document.getElementById('enableAudioButton').classList.add('hidden');
                 }).catch(error => {
                     console.error('Audio initialization failed:', error);
-                    // Show the enable audio button
+                    // Show the enable audio button in settings
                     document.getElementById('enableAudioButton').classList.remove('hidden');
+                    // Open settings to show the button
+                    openSettings();
+                    showAlert('Please enable audio in settings for alarm to work', 'info');
                 });
                 
                 // Remove event listeners once audio is initialized
@@ -1137,6 +1141,8 @@
             setTimeout(() => {
                 if (!audioInitialized) {
                     document.getElementById('enableAudioButton').classList.remove('hidden');
+                    // Don't automatically open settings, just show an alert
+                    showAlert('Audio not initialized. Enable it in settings.', 'info');
                 }
             }, 5000);
         }
@@ -1780,6 +1786,8 @@
                     
                     // Show the enable audio button
                     document.getElementById('enableAudioButton').classList.remove('hidden');
+                    openSettings(); // Open settings to show the button
+                    showAlert('Please enable audio in settings for alarm to work', 'info');
                 }
             }
         }
