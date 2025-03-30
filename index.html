@@ -466,6 +466,7 @@
         }
         .leaflet-container {
             background: #111827;
+            touch-action: none !important;
         }
         
         @media (prefers-color-scheme: dark) {
@@ -608,8 +609,11 @@
         /* Ensure map is interactive */
         #map {
             z-index: 500;
-            touch-action: manipulation;
+            touch-action: none !important; /* Change from manipulation to none */
             pointer-events: auto !important;
+            position: relative;
+            height: 100vh;
+            width: 100%;
         }
         
         /* Fix for Lucide icons */
@@ -621,6 +625,14 @@
             stroke-linecap: round;
             stroke-linejoin: round;
             fill: none;
+        }
+
+        /* Add this to prevent page scrolling when interacting with map */
+        body.map-active {
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
         }
     </style>
 </head>
@@ -957,40 +969,71 @@
         // Register service worker immediately
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
-                navigator.serviceWorker.register('./service-worker.js')
-                    .then(function(registration) {
-                        console.log('ServiceWorker registration successful with scope: ', registration.scope);
-                        serviceWorkerRegistration = registration;
+                navigator.serviceWorker.register('./service-worker.js', {
+                    scope: './'
+                })
+                .then(function(registration) {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    serviceWorkerRegistration = registration;
+                    
+                    // Force update the service worker
+                    registration.update();
+                    
+                    // Check if service worker is active
+                    if (registration.active) {
+                        console.log('Service worker is active');
                         
-                        // Force update the service worker
-                        registration.update();
-                        
-                        // Check if service worker is active
-                        if (registration.active) {
-                            console.log('Service worker is active');
-                            
-                            // If we have an active journey, restore it
-                            if (appState.isJourneyActive && appState.currentDestination) {
-                                // Restore journey state
-                                setTimeout(() => {
-                                    document.getElementById('status').textContent = 'Resuming your journey...';
-                                    setAlarm(true); // Pass true to indicate this is a resume
-                                }, 2500); // Wait for the app to initialize
-                            }
-                        } else {
-                            console.log('Service worker is not yet active');
-                            // Wait for the service worker to become active
-                            navigator.serviceWorker.ready.then(function(registration) {
-                                console.log('Service worker is now ready');
-                                serviceWorkerRegistration = registration;
-                            });
+                        // If we have an active journey, restore it
+                        if (appState.isJourneyActive && appState.currentDestination) {
+                            // Restore journey state
+                            setTimeout(() => {
+                                document.getElementById('status').textContent = 'Resuming your journey...';
+                                setAlarm(true); // Pass true to indicate this is a resume
+                            }, 2500); // Wait for the app to initialize
                         }
-                    })
-                    .catch(function(err) {
-                        console.log('ServiceWorker registration failed: ', err);
-                        showAlert('Service worker registration failed. Some features may not work.', 'error');
-                    });
+                    } else {
+                        console.log('Service worker is not yet active');
+                        // Wait for the service worker to become active
+                        navigator.serviceWorker.ready.then(function(registration) {
+                            console.log('Service worker is now ready');
+                            serviceWorkerRegistration = registration;
+                        });
+                    }
+                    
+                    // Set up periodic sync if available
+                    if ('periodicSync' in registration) {
+                        const status = Notification.permission;
+                        if (status === 'granted') {
+                            try {
+                                registration.periodicSync.register('location-check', {
+                                    minInterval: 15 * 60 * 1000, // 15 minutes
+                                });
+                                console.log('Periodic background sync registered!');
+                            } catch (e) {
+                                console.error('Periodic background sync could not be registered!', e);
+                            }
+                        }
+                    }
+                })
+                .catch(function(err) {
+                    console.log('ServiceWorker registration failed: ', err);
+                    showAlert('Service worker registration failed. Some features may not work.', 'error');
+                });
             });
+        }
+        
+        // Add this function to keep the service worker alive
+        function keepServiceWorkerAlive() {
+            if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+                // Send a ping to the service worker every 25 seconds
+                setInterval(() => {
+                    serviceWorkerRegistration.active.postMessage({
+                        type: 'PING',
+                        timestamp: Date.now()
+                    });
+                    console.log('Ping sent to service worker');
+                }, 25000);
+            }
         }
         
         // Handle splash screen
@@ -1441,6 +1484,9 @@
         
         // Update the initMap function to ensure the map is fully interactive
         function initMap() {
+            // Prevent page scrolling when map is active
+            document.body.classList.add('map-active');
+            
             map = L.map('map', {
                 zoomControl: false,
                 attributionControl: false,
@@ -1505,27 +1551,27 @@
             }
             
             // Make sure map is interactive
-            map.getContainer().style.cursor = 'grab';
-            map.getContainer().style.touchAction = 'manipulation';
-            map.getContainer().style.pointerEvents = 'auto';
+            const mapContainer = map.getContainer();
+            mapContainer.style.cursor = 'grab';
             
-            // Add event listeners for better touch interaction
-            map.getContainer().addEventListener('touchstart', function(e) {
-                map.getContainer().style.cursor = 'grabbing';
-            });
+            // Prevent default touch behavior on the map
+            mapContainer.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                mapContainer.style.cursor = 'grabbing';
+            }, { passive: false });
             
-            map.getContainer().addEventListener('touchend', function() {
-                map.getContainer().style.cursor = 'grab';
-            });
+            mapContainer.addEventListener('touchmove', function(e) {
+                e.preventDefault();
+            }, { passive: false });
+            
+            mapContainer.addEventListener('touchend', function() {
+                mapContainer.style.cursor = 'grab';
+            }, { passive: false });
             
             // Prevent bottom sheet from interfering with map interactions
-            map.getContainer().addEventListener('click', function(e) {
+            mapContainer.addEventListener('click', function(e) {
                 e.stopPropagation();
             });
-            
-            map.getContainer().addEventListener('touchmove', function(e) {
-                e.stopPropagation();
-            }, { passive: true });
         }
 
         // Play alarm
@@ -1873,6 +1919,22 @@
                     
                     // Start journey in service worker
                     if (serviceWorkerRegistration && serviceWorkerRegistration.active) {
+                        // Request wake lock if available
+                        if ('wakeLock' in navigator) {
+                            try {
+                                navigator.wakeLock.request('screen').then(wakeLock => {
+                                    console.log('Wake Lock acquired');
+                                    // Release it when journey ends or after a timeout
+                                    setTimeout(() => {
+                                        wakeLock.release();
+                                        console.log('Wake Lock released after timeout');
+                                    }, 60000); // Release after 1 minute to save battery
+                                });
+                            } catch (err) {
+                                console.error('Wake Lock error:', err);
+                            }
+                        }
+                        
                         serviceWorkerRegistration.active.postMessage({
                             type: 'START_JOURNEY',
                             journeyData: {
@@ -1885,6 +1947,23 @@
                                 updateInterval: settings.updateInterval
                             }
                         });
+                        
+                        // Register for background fetch if available
+                        if ('backgroundFetch' in registration) {
+                            registration.backgroundFetch.fetch('journey-monitor', ['/journey-data'], {
+                                title: 'Monitoring journey to ' + destName,
+                                icons: [{
+                                    sizes: '192x192',
+                                    src: 'https://cdn-icons-png.flaticon.com/128/10740/10740579.png',
+                                    type: 'image/png',
+                                }],
+                                downloadTotal: 1024,
+                            }).then(bgFetch => {
+                                console.log('Background fetch registered!');
+                            }).catch(err => {
+                                console.error('Background fetch failed to register:', err);
+                            });
+                        }
                         
                         showAlert('Journey started! Check your notification tray.', 'success');
                     } else {
@@ -1944,6 +2023,9 @@
         // Initialize the app
         function initApp() {
             initMap();
+            
+            // Keep service worker alive
+            keepServiceWorkerAlive();
 
             // Update destination display
             updateDestinationDisplay();
