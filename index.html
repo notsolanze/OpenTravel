@@ -21,10 +21,6 @@
             background-color: #111827;
             color: #F9FAFB;
             touch-action: manipulation;
-            overflow: hidden;
-            position: fixed;
-            width: 100%;
-            height: 100%;
         }
         .distance-badge {
             position: fixed;
@@ -399,7 +395,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 1000; /* Increased z-index to ensure visibility */
+            z-index: 950; /* Increased z-index to be above bottom sheet */
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             cursor: pointer;
         }
@@ -611,30 +607,69 @@
         }
 
         #map {
-            z-index: 1;
-            touch-action: auto !important;
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            pointer-events: auto !important;
+            z-index: 1; /* Ensure map has a z-index */
+            touch-action: auto; /* Allow all touch actions on map */
+            position: relative; /* Ensure z-index works */
         }
 
         /* Modify the bottom sheet content to use pointer-events: auto explicitly */
         .bottom-sheet > * {
             pointer-events: auto;
         }
+body {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    touch-action: none; /* Disable all touch actions on body */
+}
 
-        @keyframes flash {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
+#map {
+    z-index: 1;
+    touch-action: auto !important; /* Allow all touch actions on map */
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: auto !important;
+}
 
-        .flash-animation {
-            animation: flash 1s;
-        }
+.bottom-sheet {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: #1F2937;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    z-index: 900;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+    transition: transform 0.3s ease, height 0.3s ease;
+    touch-action: none;
+    overflow-y: auto;
+    max-height: 90vh;
+    pointer-events: auto;
+}
+
+/* Make only interactive elements in bottom sheet capture events */
+.bottom-sheet-handle,
+.destination-display,
+.quick-access-button,
+.recent-location-item,
+.expand-button,
+.set-destination-btn,
+.clickable {
+    pointer-events: auto;
+    touch-action: auto;
+    position: relative;
+    z-index: 1002;
+}
+
+/* Make non-interactive parts of bottom sheet pass through events */
+.bottom-sheet-background {
+    pointer-events: none;
+}
     </style>
 </head>
 <body class="bg-gray-900 text-white">
@@ -911,8 +946,6 @@
         let isLiveActivityMinimized = false;
         let recentLocations = [];
         let bottomSheetHeight = 'partial'; // 'partial', 'full', 'minimized'
-        let mapInteractionDetected = false; // Flag to track if map interaction is detected
-        let routeLine;
         
         // App state
         let appState = {
@@ -1066,155 +1099,158 @@
         
         // Setup bottom sheet
         function setupBottomSheet() {
-            const bottomSheet = document.getElementById('bottomSheet');
-            const handle = document.getElementById('bottomSheetHandle');
-            const overlay = document.getElementById('bottomSheetOverlay');
-            let startY, startHeight, currentHeight;
-            
-            // Set initial height
-            bottomSheet.style.height = '230px';
-            
-            // Handle drag to resize
-            handle.addEventListener('touchstart', function(e) {
-                e.stopPropagation(); // Stop event from propagating
-                startY = e.touches[0].clientY;
-                startHeight = parseInt(bottomSheet.style.height);
-                document.body.style.overflow = 'hidden';
-            }, { passive: false });
-            
-            handle.addEventListener('touchmove', function(e) {
-                e.preventDefault(); // Prevent default touch behavior
-                e.stopPropagation(); // Stop event from propagating
-                const deltaY = startY - e.touches[0].clientY;
-                currentHeight = startHeight + deltaY;
-                
-                // Limit min and max height
-                if (currentHeight < 100) currentHeight = 100;
-                if (currentHeight > window.innerHeight - 100) currentHeight = window.innerHeight - 100;
-                
-                bottomSheet.style.height = currentHeight + 'px';
-            }, { passive: false });
-            
-            handle.addEventListener('touchend', function(e) {
-                e.stopPropagation(); // Stop event from propagating
-                document.body.style.overflow = '';
-                
-                // Snap to positions
-                if (currentHeight < 150) {
-                    minimizeBottomSheet();
-                } else if (currentHeight < window.innerHeight / 2) {
-                    expandBottomSheetPartial();
-                } else {
-                    expandBottomSheetFull();
-                }
-            }, { passive: false });
-            
-            // Click outside to minimize
-            overlay.addEventListener('click', function() {
-                minimizeBottomSheet();
-            });
-            
-            // Double tap handle to maximize
-            handle.addEventListener('dblclick', function() {
-                if (bottomSheetHeight === 'full') {
-                    expandBottomSheetPartial();
-                } else {
-                    expandBottomSheetFull();
-                }
-            });
-            
-            // In the setupBottomSheet function, replace the searchBar click event with this:
-            document.getElementById('setDestinationBtn').addEventListener('click', function(e) {
-                e.stopPropagation(); // Stop event from propagating
-                console.log("Set destination button clicked!");
-                document.getElementById('destinationModal').classList.remove('hidden');
-            });
-
-            // Close destination modal - both X button and Cancel button
-            document.getElementById('closeDestinationModal').addEventListener('click', function(e) {
-                e.stopPropagation(); // Stop event from propagating
-                document.getElementById('destinationModal').classList.add('hidden');
-            });
-            document.getElementById('cancelDestinationBtn').addEventListener('click', function(e) {
-                e.stopPropagation(); // Stop event from propagating
-                document.getElementById('destinationModal').classList.add('hidden');
-            });
-            
-            // Setup quick access buttons with debug logging
-            document.getElementById('homeButton').addEventListener('click', function(e) {
-                e.stopPropagation(); // Stop event from propagating
-                console.log('Home button clicked');
-                if (appState.savedPlaces.home) {
-                    document.getElementById('destination').value = appState.savedPlaces.home.name;
-                    document.getElementById('destinationModal').classList.remove('hidden');
-                } else {
-                    showAlert('Home address not set. Please set it in settings.', 'info');
-                    openSettings();
-                }
-            });
-            
-            document.getElementById('workButton').addEventListener('click', function(e) {
-                e.stopPropagation(); // Stop event from propagating
-                console.log('Work button clicked');
-                if (appState.savedPlaces.work) {
-                    document.getElementById('destination').value = appState.savedPlaces.work.name;
-                    document.getElementById('destinationModal').classList.remove('hidden');
-                } else {
-                    showAlert('Work address not set. Please set it in settings.', 'info');
-                    openSettings();
-                }
-            });
-            
-            document.getElementById('newButton').addEventListener('click', function(e) {
-                e.stopPropagation(); // Stop event from propagating
-                console.log('New button clicked');
-                document.getElementById('destination').value = '';
-                document.getElementById('destinationModal').classList.remove('hidden');
-            });
-
-            // Add keyboard support for destination input
-            document.getElementById('destination').addEventListener('keyup', function(event) {
-                if (event.key === 'Enter') {
-                    setAlarm(false);
-                }
-            });
-            
-            // Add click event to map to minimize sheet
-            document.getElementById('map').addEventListener('click', function() {
-                minimizeBottomSheet();
-            });
-            
-            const expandButton = document.getElementById('expandButton');
-            expandButton.addEventListener('click', function(e) {
-                e.stopPropagation();
-                if (bottomSheetHeight === 'full') {
-                    expandBottomSheetPartial();
-                } else {
-                    expandBottomSheetFull();
-                }
-            });
-
-            // Make the entire handle area clickable for expanding
-            document.querySelector('.bottom-sheet-drag-indicator').addEventListener('click', function(e) {
-                e.stopPropagation();
-                if (bottomSheetHeight === 'full') {
-                    expandBottomSheetPartial();
-                } else {
-                    expandBottomSheetFull();
-                }
-            });
-
-            // Improve the handle's touch area
-            const handleArea = document.getElementById('bottomSheetHandle');
-            handleArea.addEventListener('click', function(e) {
-                e.stopPropagation();
-                if (bottomSheetHeight === 'full') {
-                    expandBottomSheetPartial();
-                } else {
-                    expandBottomSheetFull();
-                }
-            });
+    const bottomSheet = document.getElementById('bottomSheet');
+    const handle = document.getElementById('bottomSheetHandle');
+    const overlay = document.getElementById('bottomSheetOverlay');
+    let startY, startHeight, currentHeight;
+    
+    // Set initial height
+    bottomSheet.style.height = '230px';
+    
+    // Add a class to make the bottom sheet background pass through events
+    bottomSheet.classList.add('bottom-sheet-background');
+    
+    // Handle drag to resize
+    handle.addEventListener('touchstart', function(e) {
+        e.stopPropagation(); // Stop event from propagating
+        startY = e.touches[0].clientY;
+        startHeight = parseInt(bottomSheet.style.height);
+        document.body.style.overflow = 'hidden';
+    }, { passive: false });
+    
+    handle.addEventListener('touchmove', function(e) {
+        e.preventDefault(); // Prevent default touch behavior
+        e.stopPropagation(); // Stop event from propagating
+        const deltaY = startY - e.touches[0].clientY;
+        currentHeight = startHeight + deltaY;
+        
+        // Limit min and max height
+        if (currentHeight < 100) currentHeight = 100;
+        if (currentHeight > window.innerHeight - 100) currentHeight = window.innerHeight - 100;
+        
+        bottomSheet.style.height = currentHeight + 'px';
+    }, { passive: false });
+    
+    handle.addEventListener('touchend', function(e) {
+        e.stopPropagation(); // Stop event from propagating
+        document.body.style.overflow = '';
+        
+        // Snap to positions
+        if (currentHeight < 150) {
+            minimizeBottomSheet();
+        } else if (currentHeight < window.innerHeight / 2) {
+            expandBottomSheetPartial();
+        } else {
+            expandBottomSheetFull();
         }
+    }, { passive: false });
+    
+    // Click outside to minimize
+    overlay.addEventListener('click', function() {
+        minimizeBottomSheet();
+    });
+    
+    // Double tap handle to maximize
+    handle.addEventListener('dblclick', function() {
+        if (bottomSheetHeight === 'full') {
+            expandBottomSheetPartial();
+        } else {
+            expandBottomSheetFull();
+        }
+    });
+    
+    // In the setupBottomSheet function, replace the searchBar click event with this:
+    document.getElementById('setDestinationBtn').addEventListener('click', function(e) {
+        e.stopPropagation(); // Stop event from propagating
+        console.log("Set destination button clicked!");
+        document.getElementById('destinationModal').classList.remove('hidden');
+    });
+
+    // Close destination modal - both X button and Cancel button
+    document.getElementById('closeDestinationModal').addEventListener('click', function(e) {
+        e.stopPropagation(); // Stop event from propagating
+        document.getElementById('destinationModal').classList.add('hidden');
+    });
+    document.getElementById('cancelDestinationBtn').addEventListener('click', function(e) {
+        e.stopPropagation(); // Stop event from propagating
+        document.getElementById('destinationModal').classList.add('hidden');
+    });
+    
+    // Setup quick access buttons with debug logging
+    document.getElementById('homeButton').addEventListener('click', function(e) {
+        e.stopPropagation(); // Stop event from propagating
+        console.log('Home button clicked');
+        if (appState.savedPlaces.home) {
+            document.getElementById('destination').value = appState.savedPlaces.home.name;
+            document.getElementById('destinationModal').classList.remove('hidden');
+        } else {
+            showAlert('Home address not set. Please set it in settings.', 'info');
+            openSettings();
+        }
+    });
+    
+    document.getElementById('workButton').addEventListener('click', function(e) {
+        e.stopPropagation(); // Stop event from propagating
+        console.log('Work button clicked');
+        if (appState.savedPlaces.work) {
+            document.getElementById('destination').value = appState.savedPlaces.work.name;
+            document.getElementById('destinationModal').classList.remove('hidden');
+        } else {
+            showAlert('Work address not set. Please set it in settings.', 'info');
+            openSettings();
+        }
+    });
+    
+    document.getElementById('newButton').addEventListener('click', function(e) {
+        e.stopPropagation(); // Stop event from propagating
+        console.log('New button clicked');
+        document.getElementById('destination').value = '';
+        document.getElementById('destinationModal').classList.remove('hidden');
+    });
+
+    // Add keyboard support for destination input
+    document.getElementById('destination').addEventListener('keyup', function(event) {
+        if (event.key === 'Enter') {
+            setAlarm(false);
+        }
+    });
+    
+    // Add click event to map to minimize sheet
+    document.getElementById('map').addEventListener('click', function() {
+        minimizeBottomSheet();
+    });
+    
+    const expandButton = document.getElementById('expandButton');
+    expandButton.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (bottomSheetHeight === 'full') {
+            expandBottomSheetPartial();
+        } else {
+            expandBottomSheetFull();
+        }
+    });
+
+    // Make the entire handle area clickable for expanding
+    document.querySelector('.bottom-sheet-drag-indicator').addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (bottomSheetHeight === 'full') {
+            expandBottomSheetPartial();
+        } else {
+            expandBottomSheetFull();
+        }
+    });
+
+    // Improve the handle's touch area
+    const handleArea = document.getElementById('bottomSheetHandle');
+    handleArea.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (bottomSheetHeight === 'full') {
+            expandBottomSheetPartial();
+        } else {
+            expandBottomSheetFull();
+        }
+    });
+}
 
         // Function to minimize bottom sheet
         function minimizeBottomSheet() {
@@ -1244,31 +1280,6 @@
             bottomSheet.style.height = (window.innerHeight - 100) + 'px';
             bottomSheetHeight = 'full';
             overlay.classList.add('active');
-        }
-
-        // Function to detect map interaction and minimize bottom sheet
-        function setupMapInteractionDetection() {
-            const mapElement = document.getElementById('map');
-            
-            // Add event listeners to detect map interaction
-            mapElement.addEventListener('touchstart', function(e) {
-                // Only minimize if the sheet is not already minimized
-                if (bottomSheetHeight !== 'minimized') {
-                    console.log('Map interaction detected, minimizing bottom sheet');
-                    minimizeBottomSheet();
-                }
-                e.stopPropagation();
-            }, { passive: true });
-            
-            // Also add mouse events for desktop testing
-            mapElement.addEventListener('mousedown', function(e) {
-                // Only minimize if the sheet is not already minimized
-                if (bottomSheetHeight !== 'minimized') {
-                    console.log('Map interaction detected, minimizing bottom sheet');
-                    minimizeBottomSheet();
-                }
-                e.stopPropagation();
-            });
         }
 
         // Replace the setupDestinationAutocomplete function with this:
@@ -1481,10 +1492,7 @@
                 boxZoom: true,
                 tap: true,
                 keyboard: true,
-                inertia: true,
-                zoomSnap: 0.5,
-                zoomDelta: 0.5,
-                wheelDebounceTime: 100
+                inertia: true
             }).setView([14.5995, 120.9842], 15); // Manila coordinates
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1519,14 +1527,6 @@
                 e.stopPropagation(); // Stop event from propagating
                 if (userMarker) {
                     map.setView(userMarker.getLatLng(), 16);
-                    // Flash the user marker to make it more visible
-                    const markerIcon = userMarker.getElement();
-                    if (markerIcon) {
-                        markerIcon.classList.add('flash-animation');
-                        setTimeout(() => {
-                            markerIcon.classList.remove('flash-animation');
-                        }, 1000);
-                    }
                 }
             });
             
@@ -1534,23 +1534,22 @@
             L.control.zoom({
                 position: 'bottomright'
             }).addTo(map);
-            
-            // Make sure the map can be interacted with
-            const mapContainer = map.getContainer();
-            mapContainer.style.touchAction = 'auto';
-            mapContainer.style.pointerEvents = 'auto';
-            
-            // Add event listeners to detect map interaction and minimize bottom sheet
-            setupMapInteractionDetection();
-            
-            // Add event listeners to Leaflet map events
-            map.on('dragstart', function() {
-                minimizeBottomSheet();
-            });
-            
-            map.on('zoomstart', function() {
-                minimizeBottomSheet();
-            });
+// Make sure the map can be interacted with
+map.getContainer().style.touchAction = 'auto';
+map.getContainer().style.pointerEvents = 'auto';
+
+// Ensure map events don't propagate to parent elements
+map.getContainer().addEventListener('touchstart', function(e) {
+    e.stopPropagation();
+}, { passive: false });
+
+map.getContainer().addEventListener('touchmove', function(e) {
+    e.stopPropagation();
+}, { passive: true });
+
+map.getContainer().addEventListener('touchend', function(e) {
+    e.stopPropagation();
+}, { passive: false });
         }
 
         // Play alarm
@@ -1627,23 +1626,6 @@
             }
 
             if (destination && isAlarmActive) {
-                // Update route line
-                if (routeLine) {
-                    map.removeLayer(routeLine);
-                }
-                
-                // Create a new route line from current position to destination
-                routeLine = L.polyline([
-                    [latitude, longitude],
-                    [destination[0], destination[1]]
-                ], {
-                    color: '#10B981',
-                    weight: 4,
-                    opacity: 0.7,
-                    dashArray: '10, 10',
-                    lineJoin: 'round'
-                }).addTo(map);
-                
                 const distance = map.distance([latitude, longitude], destination);
                 
                 // Update distance display
@@ -1839,7 +1821,6 @@
         function setupJourney(destCoords, destName) {
             if (destinationMarker) map.removeLayer(destinationMarker);
             if (circle) map.removeLayer(circle);
-            if (routeLine) map.removeLayer(routeLine);
             
             destinationMarker = L.marker(destCoords, {
                 icon: L.divIcon({
@@ -2224,6 +2205,22 @@
             setTimeout(() => {
                 expandBottomSheetPartial();
             }, 2500); // Wait for splash screen to disappear
+
+            // Make the map always interactive
+            const mapElement = document.getElementById('map');
+            mapElement.style.touchAction = 'auto';
+            mapElement.style.pointerEvents = 'auto';
+
+            // Ensure bottom sheet only captures events on its actual content
+            const bottomSheet = document.getElementById('bottomSheet');
+            bottomSheet.addEventListener('touchstart', function(e) {
+                // If the touch is directly on the bottom sheet background (not on a child element),
+                // let it pass through to the map
+                if (e.target === bottomSheet) {
+                    e.stopPropagation();
+                    return false;
+                }
+            });
         }
 
         // Add this in the initApp function after other event listeners
@@ -2367,20 +2364,18 @@
                     e.stopPropagation();
                 });
             }
-            
-            // Prevent default touch actions on document level except for map
-            document.addEventListener('touchmove', function(e) {
-                if (!e.target.closest('#map')) {
-                    e.preventDefault();
-                }
-            }, { passive: false });
-
-            // Ensure map container has proper touch handling
-            const mapElement = document.getElementById('map');
-            mapElement.style.touchAction = 'auto';
-            mapElement.style.pointerEvents = 'auto';
         });
+// Prevent default touch actions on document level except for map
+document.addEventListener('touchmove', function(e) {
+    if (!e.target.closest('#map')) {
+        e.preventDefault();
+    }
+}, { passive: false });
+
+// Ensure map container has proper touch handling
+const mapElement = document.getElementById('map');
+mapElement.style.touchAction = 'auto';
+mapElement.style.pointerEvents = 'auto';
     </script>
 </body>
 </html>
-
