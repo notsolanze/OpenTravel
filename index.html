@@ -399,7 +399,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 950; /* Increased z-index to be above bottom sheet */
+            z-index: 1000; /* Increased z-index to ensure visibility */
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             cursor: pointer;
         }
@@ -624,6 +624,16 @@
         /* Modify the bottom sheet content to use pointer-events: auto explicitly */
         .bottom-sheet > * {
             pointer-events: auto;
+        }
+
+        @keyframes flash {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .flash-animation {
+            animation: flash 1s;
         }
     </style>
 </head>
@@ -902,6 +912,7 @@
         let recentLocations = [];
         let bottomSheetHeight = 'partial'; // 'partial', 'full', 'minimized'
         let mapInteractionDetected = false; // Flag to track if map interaction is detected
+        let routeLine;
         
         // App state
         let appState = {
@@ -1470,7 +1481,10 @@
                 boxZoom: true,
                 tap: true,
                 keyboard: true,
-                inertia: true
+                inertia: true,
+                zoomSnap: 0.5,
+                zoomDelta: 0.5,
+                wheelDebounceTime: 100
             }).setView([14.5995, 120.9842], 15); // Manila coordinates
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -1505,6 +1519,14 @@
                 e.stopPropagation(); // Stop event from propagating
                 if (userMarker) {
                     map.setView(userMarker.getLatLng(), 16);
+                    // Flash the user marker to make it more visible
+                    const markerIcon = userMarker.getElement();
+                    if (markerIcon) {
+                        markerIcon.classList.add('flash-animation');
+                        setTimeout(() => {
+                            markerIcon.classList.remove('flash-animation');
+                        }, 1000);
+                    }
                 }
             });
             
@@ -1605,6 +1627,23 @@
             }
 
             if (destination && isAlarmActive) {
+                // Update route line
+                if (routeLine) {
+                    map.removeLayer(routeLine);
+                }
+                
+                // Create a new route line from current position to destination
+                routeLine = L.polyline([
+                    [latitude, longitude],
+                    [destination[0], destination[1]]
+                ], {
+                    color: '#10B981',
+                    weight: 4,
+                    opacity: 0.7,
+                    dashArray: '10, 10',
+                    lineJoin: 'round'
+                }).addTo(map);
+                
                 const distance = map.distance([latitude, longitude], destination);
                 
                 // Update distance display
@@ -1800,6 +1839,7 @@
         function setupJourney(destCoords, destName) {
             if (destinationMarker) map.removeLayer(destinationMarker);
             if (circle) map.removeLayer(circle);
+            if (routeLine) map.removeLayer(routeLine);
             
             destinationMarker = L.marker(destCoords, {
                 icon: L.divIcon({
